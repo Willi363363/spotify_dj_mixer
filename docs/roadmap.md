@@ -13,7 +13,8 @@ Statuts : ⬜ à faire · 🚧 en cours · ✅ fait · ⏳ en attente d'une déc
 | Tester la connexion extension → programme local | ✅ 2026-10-23 |
 | Relire Smart DJ, étudier Eternal Jukebox et l'existant | ✅ 2026-10-23 |
 | Tester tous les « supposé » : séries A, B, C (maquette E2) | ✅ 2026-10-23 |
-| Écouter les transitions de la maquette E2 | ⏳ avis du développeur |
+| Écouter les transitions de la maquette E2 | ✅ 2026-10-23 : montée continue validée, mix par fondu rejeté |
+| Recherche sur les techniques des DJ | ✅ 2026-10-23, cf. [`recherche/dj/`](recherche/dj/README.md) |
 | Observer une vraie pub avec l'API `inStreamApi` | ⏳ au premier passage de pub |
 | Documenter le tout | ✅ 2026-10-23 |
 
@@ -46,6 +47,19 @@ Choix techniques à trancher au démarrage de E1 :
 Objectif : superposition de deux morceaux, échange des basses, calage du tempo, boucle sans silence, « vinyle qui freine ». Conception dans [`architecture.md`](architecture.md#e2-le-module-avec-avance).
 
 Premier jalon à définir au démarrage : un module qui retarde le son de N secondes sans artefact, mesuré par enregistrement.
+
+## Décisions
+
+| Décision | Pourquoi |
+|---|---|
+| La **montée par roulements sans blanc** est la transition de référence | Validée à l'écoute ; un temps de silence avant le drop a déplu |
+| Le **fondu de volume seul** n'est pas une transition DJ | Rejeté deux fois à l'écoute, même calé sur le rythme |
+| Le **mélange** se fait temps par temps (tempo qui glisse), recalé à ±½ temps, avec échange des basses et filtre | Validé à l'écoute (« clean de fou ») ; méthode de l'article Spotify 2017 |
+| Les transitions sont des **recettes** d'ingrédients (volume, égaliseur, filtre, effets, boucle), choisies automatiquement | Modèle de Spotify Mix, cf. [`recherche/spotify-transitions.md`](recherche/spotify-transitions.md) |
+| Une superposition **se replie sur une coupe** quand les temps ne se calent pas | Comme Spotify et Apple ; vérifié en vrai (accord 0,11 → coupe) |
+| Tout point de transition se **recale sur le son** (attaques de grosse caisse) | Les positions de Spotify ont laissé A et B décalés (accord 0,02) |
+| Choix de la transition selon le genre, le tempo, la tonalité, l'énergie, et sans répéter la précédente | Pratique des DJ, cf. [`recherche/dj/automatisation.md`](recherche/dj/automatisation.md) |
+| Tests d'écoute : un essai à la fois, annoncé, sur des morceaux pas encore entendus | Sans repères, le développeur ne sait pas ce qu'il entend |
 
 ## Hors périmètre
 

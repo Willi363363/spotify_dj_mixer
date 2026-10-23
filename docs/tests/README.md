@@ -11,7 +11,8 @@ Tests réalisés le **2026-10-23** sur la machine de [`../environnement.md`](../
 | 05 | [Connexion locale](05-connexion-locale.md) | L'extension peut-elle piloter un programme local ? | ✅ Oui, 0,7 ms |
 | 06 | [Série A : Spotify seul](06-serie-a-spotify.md) | Décisions, transition, volume, interface, file, pubs, ressemblance | ✅ sauf pubs non observées ; trou de changement 12 à 400 ms |
 | 07 | [Série B : effets](07-serie-b-effets.md) | Égaliseur, écho, clics des balayages | ✅ égaliseur et écho, ⚠️ clics |
-| 08 | [Série C : maquette E2](08-serie-c-maquette-e2.md) | Son retardé, mix avec échange des basses, calage du tempo, boucle, freinage | ✅ principe validé, écoute à faire |
+| 08 | [Série C : maquette E2](08-serie-c-maquette-e2.md) | Son retardé, mix avec échange des basses, calage du tempo, boucle, freinage | ✅ principe validé |
+| 09 | [Écoute de la maquette](09-ecoute-maquette.md) | Les transitions sonnent-elles « DJ » ? | ✅ **montée continue validée** ; ❌ mix par fondu rejeté |
 
 ## Règle
 

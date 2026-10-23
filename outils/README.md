@@ -16,6 +16,7 @@ Scripts qui ont servi aux tests de [`../docs/tests/`](../docs/tests/README.md). 
 | [`a3-fondu-volume.js`](a3-fondu-volume.js) | Fondu de volume aller-retour | 06 A3 |
 | [`a4-interface-file-pub.js`](a4-interface-file-pub.js) | Bouton, raccourci, file d'attente, champs liés aux pubs | 06 A4-A6 |
 | [`a7-entree-ressemblance.js`](a7-entree-ressemblance.js) | Point d'entrée par ressemblance de mesures | 06 A7 |
+| [`choisir-paires.js`](choisir-paires.js) | Cherche dans une playlist les paires faciles à mixer (tempo, tonalité, fiabilité des mesures) | 09 |
 | [`dj-effets.conf`](dj-effets.conf) | Instance PipeWire : égaliseur 3 bandes, passe-haut, écho | 07 |
 | [`b-analyse.py`](b-analyse.py) | Égaliseur, écho, clics, avant / après, avec recalage | 07 |
 

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mode DJ, écran</title>
+<style>
+  :root { --bg: #0f1115; --card: #181b22; --text: #e8eaf0; --sub: #8b93a7; --accent: #1ed760; --warn: #ffb020; --line: #2a2f3a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; padding: 16px; }
+  .grid { display: grid; gap: 12px; max-width: 760px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .label { color: var(--sub); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .title { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .artist { color: var(--sub); }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .big { font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 10px; }
+  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .2s linear; }
+  .live { border-color: var(--accent); }
+  .soon { border-color: var(--warn); }
+  .beats { display: flex; gap: 6px; margin-top: 10px; }
+  .beats span { flex: 1; height: 10px; border-radius: 3px; background: var(--line); }
+  .beats span.on { background: var(--accent); }
+  .muted { color: var(--sub); }
+  .ingr { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .ingr span { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--line); color: var(--text); }
+  .ingr b { color: var(--sub); font-weight: 600; margin-right: 4px; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="card" id="heardCard">
+    <div class="label">Tu entends</div>
+    <div class="title" id="heard">…</div>
+    <div class="row"><span class="artist" id="heardArtist"></span><span class="muted" id="heardPos"></span></div>
+  </div>
+  <div class="card" id="nextCard">
+    <div class="label" id="nextLabel">Prochaine transition</div>
+    <div class="row"><div class="title" id="nextMode">aucune prévue</div><div class="big" id="nextIn"></div></div>
+    <div class="muted" id="nextTracks"></div>
+    <div class="muted" id="nextWhy"></div>
+    <div class="ingr" id="nextIngr"></div>
+    <div class="beats" id="beats"></div>
+    <div class="bar"><div id="nextBar"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">Spotify joue réellement (en avance)</div>
+    <div class="row"><div><b id="spot">…</b> <span class="artist" id="spotArtist"></span></div><span class="muted" id="spotPos"></span></div>
+    <div class="muted" id="delay"></div>
+  </div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const mmss = (s) => (s == null || isNaN(s)) ? '' : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const MODES = { build: 'Montée', spinback: 'Retour arrière', mix: 'Mélange', loop: 'Boucle', brake: 'Frein' };
+$('beats').innerHTML = '<span></span>'.repeat(8);
+async function tick() {
+  let s;
+  try { s = await (await fetch('/state', { cache: 'no-store' })).json(); } catch { return; }
+  $('heard').textContent = s.heard?.name ?? '…';
+  $('heardArtist').textContent = s.heard?.artist ?? '';
+  $('heardPos').textContent = s.heard?.pos_s != null ? `${mmss(s.heard.pos_s)} / ${mmss(s.heard.dur_s)}` : '';
+  $('spot').textContent = s.spotify?.name ?? '…';
+  $('spotArtist').textContent = s.spotify?.artist ?? '';
+  $('spotPos').textContent = s.spotify ? `${mmss(s.spotify.pos_s)} / ${mmss(s.spotify.dur_s)}` : '';
+  $('delay').textContent = `Retard du son sur Spotify : ${s.delay_s.toFixed(1)} s`;
+  const card = $('nextCard'), t = s.current ?? s.next;
+  card.classList.toggle('live', !!s.current);
+  card.classList.toggle('soon', !s.current && s.next && s.next.in_s < 8);
+  if (!t) { $('nextLabel').textContent = 'Prochaine transition'; $('nextMode').textContent = 'aucune prévue'; $('nextIn').textContent = ''; $('nextTracks').textContent = ''; $('nextWhy').textContent = ''; $('nextIngr').innerHTML = ''; $('nextBar').style.width = '0'; return; }
+  $('nextLabel').textContent = s.current ? 'Transition en cours' : 'Prochaine transition';
+  $('nextMode').textContent = t.label ?? MODES[t.mode] ?? t.mode;
+  $('nextTracks').textContent = `${t.from ?? '?'}  →  ${t.to ?? '?'}`;
+  $('nextWhy').textContent = t.raison ? `Pourquoi : ${t.raison}` : '';
+  $('nextIngr').replaceChildren(...Object.entries(t.ingredients ?? {}).map(([k, v]) => {
+    const el = document.createElement('span'); const b = document.createElement('b');
+    b.textContent = k; el.append(b, v); return el;
+  }));
+  const bars = Math.max(1, Math.round(t.dur_s / t.bar_s));
+  if (s.current) {
+    $('nextIn').textContent = `mesure ${Math.min(bars, Math.floor(t.elapsed_s / t.bar_s) + 1)}/${bars}`;
+    $('nextBar').style.width = `${Math.min(100, 100 * t.elapsed_s / t.dur_s)}%`;
+  } else {
+    $('nextIn').textContent = `${Math.max(0, t.in_s).toFixed(1)} s`;
+    $('nextBar').style.width = '0';
+  }
+  const beatsIn = s.current ? Math.floor(t.elapsed_s / (t.bar_s / 4)) % 8 : -1;
+  [...$('beats').children].forEach((el, i) => el.classList.toggle('on', i === beatsIn));
+}
+setInterval(tick, 150);
+tick();
+</script>
+</body>
+</html>

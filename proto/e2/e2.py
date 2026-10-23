@@ -1,32 +1,98 @@
 """Maquette E2 : Spotify -> sortie virtuelle dj_in -> ce programme (D secondes d'avance) -> haut-parleurs.
 
 Ordres reçus en UDP sur 127.0.0.1:47801, JSON :
-  {"cmd": "transition", "mode": "mix"|"brake"|"loop", "t_wall": <ms du changement A->B>,
-   "bar_s": <durée d'une mesure de A>, "ratio": <tempo A / tempo B>, "bars": 4}
-Le programme retrouve l'échantillon exact du changement (micro-silence de Spotify), prépare le
-segment de transition à partir de la mémoire, puis le joue à la place du flux.
+  {"cmd": "transition", "mode": <préréglage de recettes.py>, "t_wall": <ms du changement A->B>,
+   "bar_s": <durée d'une mesure de A>, "ratio": <tempo A / tempo B>, "raison": <pourquoi ce choix>}
+  {"cmd": "track", ...}  infos de morceau envoyées par espion.mjs, pour l'écran.
+Le programme retrouve l'échantillon exact du changement (micro-silence de Spotify), fait rendre la
+recette par rendu.py à partir de la mémoire, puis la joue à la place du flux. Écran : http://127.0.0.1:47802
 Usage : python3 -I proto/e2/e2.py [délai_s]   (journal sur la sortie standard)
 """
+import bisect
+import http.server
 import json
 import os
 import socket
 import subprocess
 import sys
-import tempfile
 import threading
 import time
-import wave
 
 import numpy as np
 
-SR, CH = 44100, 2
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)  # python -I n'ajoute pas le dossier du script au chemin d'import
+
+from recettes import ALIASES, CH, PRESETS, SR, Refus  # noqa: E402
+from rendu import RENDERERS  # noqa: E402
+
 D = float(sys.argv[1]) if len(sys.argv) > 1 else 20.0
 BLOCK = 1024
 buf = np.zeros((SR * 600, CH), dtype=np.float32)  # 10 min de mémoire
 written = 0          # échantillons reçus
 clock = []           # (ms mur, échantillons reçus) pour relier l'heure à la mémoire
-plan = []            # segments à jouer à la place du flux : (début_lecture, tableau, reprise_lecture)
+plan = []            # segments à jouer à la place du flux : (début, tableau, reprise, préréglage, infos)
+tracks = []          # (échantillon d'entrée, infos du morceau envoyées par espion.mjs)
+track_samples = []   # les mêmes échantillons seuls, pour la recherche dichotomique
+rp = 0               # position de lecture dans la mémoire (ce qui part vers les haut-parleurs)
+current = None       # transition en train d'être jouée
 log = lambda *a: print(time.strftime("%H:%M:%S"), *a, flush=True)
+
+
+class Memoire:
+    """Ce que rendu.py voit de la mémoire."""
+    buf = buf
+    log = staticmethod(log)
+
+    @staticmethod
+    def wait(n):
+        while written < n:
+            time.sleep(0.02)
+
+
+def sample_at(t_wall):
+    """Échantillon de la mémoire reçu à l'heure t_wall (ms)."""
+    i = bisect.bisect_left(clock, (t_wall,))
+    return clock[min(i, len(clock) - 1)][1] if clock else 0
+
+
+def track_at(sample):
+    """Morceau joué à cet endroit de la mémoire, et sa position en secondes."""
+    i = bisect.bisect_right(track_samples, sample) - 1
+    if i < 0:
+        return None
+    s, info = tracks[i]
+    pos = info["pos_ms"] / 1000 + (0 if info.get("paused") else (sample - s) / SR)
+    return {"name": info["name"], "artist": info["artist"], "pos_s": pos, "dur_s": info["dur_ms"] / 1000}
+
+
+def state():
+    heard = track_at(rp - int(0.06 * SR))  # latence de pacat
+    if current:
+        heard = {**(heard or {}), "name": current["from"], "artist": "transition en cours", "pos_s": None, "dur_s": None}
+    nxt = None
+    if plan:
+        p = plan[0]
+        to = track_at(p[2] + 3 * SR)  # le nom de B arrive après son son : on le relit 3 s après la reprise
+        nxt = {**p[4], "to": to and to["name"], "mode": p[3], "in_s": (p[0] - rp) / SR}
+    cur = {**current, "elapsed_s": time.time() - current["t0"]} if current else None
+    return {"heard": heard, "spotify": track_at(written), "delay_s": (written - rp) / SR, "next": nxt, "current": cur}
+
+
+class Screen(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path.startswith("/state"):
+            body, kind = json.dumps(state()).encode(), "application/json"
+        else:
+            body, kind = open(os.path.join(HERE, "ecran.html"), "rb").read(), "text/html; charset=utf-8"
+        self.send_response(200)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
 
 
 def reader():
@@ -59,63 +125,20 @@ def find_switch(t_wall):
     return a + best_end - best, a + best_end  # fin de A, début de B
 
 
-def band(x, lo=None, hi=None):
-    """Filtre par FFT, sans déphasage : garde [lo, hi] avec des flancs doux (pente d'ordre 4)."""
-    f = np.fft.rfftfreq(len(x), 1 / SR)[:, None]
-    m = np.ones_like(f)
-    if lo:
-        m = m / np.sqrt(1 + (lo / np.maximum(f, 1)) ** 8)
-    if hi:
-        m = m / np.sqrt(1 + (f / hi) ** 8)
-    return np.fft.irfft(np.fft.rfft(x, axis=0) * m, n=len(x), axis=0).astype(np.float32)
-
-
-def stretch(x, tempo):
-    """Change le tempo sans changer la hauteur, via le programme rubberband."""
-    with tempfile.TemporaryDirectory() as d:
-        src, dst = os.path.join(d, "in.wav"), os.path.join(d, "out.wav")
-        with wave.open(src, "wb") as w:
-            w.setnchannels(CH); w.setsampwidth(2); w.setframerate(SR)
-            w.writeframes((np.clip(x, -1, 1) * 32767).astype("<i2").tobytes())
-        subprocess.run(["rubberband", "-q", "-T", f"{tempo:.5f}", src, dst], check=True)
-        with wave.open(dst) as w:
-            return np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").reshape(-1, CH).astype(np.float32) / 32767
-
-
-def ramp(n, a, b):
-    return np.linspace(a, b, n, dtype=np.float32)[:, None]
-
-
 def prepare(o):
+    """Rend la recette demandée ; si elle refuse (calage impossible), se replie sur une coupe."""
     end_a, start_b = find_switch(o["t_wall"])
     bar = int(o["bar_s"] * SR)
-    bars = o.get("bars", 4)
-    L = bar * bars
     log(f"changement repéré : fin de A à {end_a}, début de B à {start_b}, trou {(start_b - end_a) / SR * 1000:.1f} ms")
-    if o["mode"] == "loop":   # rejoue la dernière mesure de A depuis la mémoire, puis B net sur le temps
-        seg = np.concatenate([buf[end_a - bar:end_a]] * bars)
-        return end_a, seg, start_b
-    if o["mode"] == "brake":  # « vinyle qui freine » sur la dernière mesure de A, puis B
-        tail = buf[end_a - bar:end_a]
-        speed = np.linspace(1.0, 0.0, bar) ** 1.5
-        pos = np.cumsum(speed)
-        pos = pos[pos < bar - 1]
-        out = np.stack([np.interp(pos, np.arange(bar), tail[:, c]) for c in range(CH)], axis=1).astype(np.float32)
-        return end_a - bar, out * ramp(len(out), 1, 0.6), start_b
-    # mix : A sur ses `bars` dernières mesures, B calé au tempo de A, échange des basses à mi-parcours
-    need = int(L * o["ratio"])  # accélérer B d'un facteur ratio raccourcit le son : il en faut L * ratio
-    while written < start_b + need + SR:
-        time.sleep(0.05)
-    a = buf[end_a - L:end_a].copy()
-    b = stretch(buf[start_b:start_b + need + SR], o["ratio"])[:L]
-    half, xf = L // 2, int(0.05 * SR)
-    swap = np.concatenate([np.zeros(half - xf // 2), np.linspace(0, 1, xf), np.ones(L - half - xf + xf // 2)])[:L, None].astype(np.float32)
-    a_mix = a * (1 - swap) + band(a, lo=180) * swap           # A perd ses basses à la mi-transition
-    b_mix = band(b, lo=180) * (1 - swap) + b * swap           # B les récupère au même instant
-    vol_a = np.concatenate([np.ones(half), np.linspace(1, 0, L - half)])[:, None]
-    vol_b = np.concatenate([np.linspace(0, 1, half), np.ones(L - half)])[:, None]
-    seg = (a_mix * vol_a + b_mix * vol_b).astype(np.float32)
-    return end_a - L, seg, start_b + need
+    preset = ALIASES.get(o["mode"], o["mode"])
+    raison = o.get("raison")
+    try:
+        start, seg, resume = RENDERERS[preset](Memoire, end_a, start_b, bar, o["ratio"])
+    except Refus as e:
+        log(f"refus de « {preset} » : {e} ; repli sur une coupe")
+        raison, preset = f"repli : {e}", "coupe"
+        start, seg, resume = RENDERERS["coupe"](Memoire, end_a, start_b, bar, o["ratio"])
+    return start, seg, resume, preset, raison
 
 
 def control():
@@ -123,25 +146,47 @@ def control():
     s.bind(("127.0.0.1", 47801))
     while True:
         o = json.loads(s.recv(4096))
+        if o.get("cmd") == "track":
+            n = sample_at(o["t_wall"])
+            if not tracks or tracks[-1][0] < n:
+                tracks.append((n, o))
+                track_samples.append(n)
+            continue
         log("ordre reçu", o)
         try:
-            plan.append(prepare(o))
-            log(f"transition prête : {len(plan[-1][1]) / SR:.2f} s de segment")
+            start, seg, resume, preset, raison = prepare(o)
+            frm = track_at(start)
+            p = PRESETS[preset]
+            info = {"from": frm and frm["name"], "bar_s": o["bar_s"], "dur_s": max(len(seg) / SR, 0.01),
+                    "label": p["label"], "ingredients": p["ingredients"], "raison": raison}
+            plan.append((start, seg, resume, preset, info))
+            log(f"transition prête : {p['label']}, {len(seg) / SR:.2f} s de segment")
         except Exception as e:  # la maquette doit survivre à un ordre raté
-            log("échec de préparation :", e)
+            log("échec de préparation :", repr(e))
 
 
 def writer():
+    global rp, current
     out = subprocess.Popen(["pacat", "--playback", "--format=float32le", f"--rate={SR}",
                             f"--channels={CH}", "--latency-msec=60", "--client-name=dj-e2"], stdin=subprocess.PIPE)
     while written < D * SR:
         time.sleep(0.01)
     log(f"lecture démarrée avec {D:.0f} s d'avance")
-    rp = 0
+    warned = None
     while True:
+        if plan and plan[0] is not warned and plan[0][0] - rp < 5 * SR:
+            warned = plan[0]
+            subprocess.Popen(["notify-send", "Maquette E2", f"Dans 5 s : {plan[0][4]['label']}"])
         if plan and rp >= plan[0][0]:
-            start, seg, resume = plan.pop(0)
-            out.stdin.write(seg.tobytes())
+            start, seg, resume, preset, info = plan[0]
+            # le son sort ~60 ms après l'écriture (latence de pacat) : la notification tombe avec la transition
+            subprocess.Popen(["notify-send", "Maquette E2", f"Maintenant : {info['label']}"])
+            to = track_at(resume + 3 * SR)
+            current = {**info, "to": to and to["name"], "mode": preset, "t0": time.time() + 0.06}
+            plan.pop(0)
+            for k in range(0, len(seg), BLOCK):  # par blocs, pour que l'écran suive la progression
+                out.stdin.write(seg[k:k + BLOCK].tobytes())
+            current = None
             log(f"segment joué ({len(seg) / SR:.2f} s), reprise du flux, avance restante {(written - resume) / SR:.1f} s")
             rp = resume
             continue
@@ -154,4 +199,7 @@ def writer():
 
 threading.Thread(target=reader, daemon=True).start()
 threading.Thread(target=control, daemon=True).start()
+screen = http.server.ThreadingHTTPServer(("127.0.0.1", 47802), Screen)
+threading.Thread(target=screen.serve_forever, daemon=True).start()
+log("écran sur http://127.0.0.1:47802")
 writer()

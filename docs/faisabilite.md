@@ -42,14 +42,16 @@ Catalogue de tout ce qui a été envisagé. **E1** = prototype sans module audio
 | Balayage sans clic | ⚠️ Clics mesurés avec les nœuds fournis | E1 avec effets lissés, ou E2 | idem |
 | Effets pilotés depuis l'extension | ✅ Connexion testée (0,7 ms) | E1 | [05](tests/05-connexion-locale.md) |
 | Son retardé en mémoire, sans perte | ✅ Mesuré (20,01 s, ressemblance 0,9998) | E2 | [08](tests/08-serie-c-maquette-e2.md) |
-| Superposer deux morceaux sans Premium | ✅ Maquette | E2 | idem |
+| **Montée par roulements jusqu'au drop** | ✅ **Validée à l'oreille** | E2 | [09](tests/09-ecoute-maquette.md) |
+| Superposer deux morceaux sans Premium | ✅ **Mélange validé à l'oreille** (tempo qui glisse, échange des basses) ; ❌ en simple fondu | E2 | [08](tests/08-serie-c-maquette-e2.md), [09](tests/09-ecoute-maquette.md) |
+| Choix automatique du préréglage et des points de transition | ✅ Testé à blanc sur 6 paires et en vrai | E2 | [09](tests/09-ecoute-maquette.md) |
 | Échange des basses entre les deux morceaux | ✅ Maquette | E2 | idem |
 | Caler les tempos sans changer la hauteur | ✅ Maquette (`rubberband`) ; utile sous ~6 % d'écart | E2 | idem |
 | Boucle sans silence depuis la mémoire | ✅ Mesuré : aucun silence | E2 | idem |
 | Effet « vinyle qui freine » | ✅ Maquette | E2 | idem |
 | Scratch sur le son déjà passé | Supposé, même mécanisme que le freinage | E2 | — |
 
-**Écoute** : les transitions de la série C n'ont pas encore été jugées à l'oreille.
+**Écoute** : cf. [`tests/09-ecoute-maquette.md`](tests/09-ecoute-maquette.md). Catalogue des transitions de DJ et leur état chez nous : [`recherche/dj/transitions.md`](recherche/dj/transitions.md).
 
 ## Impossible
 
