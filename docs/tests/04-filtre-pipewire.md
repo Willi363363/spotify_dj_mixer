@@ -8,7 +8,7 @@ Config : [`../../outils/dj-filter.conf`](../../outils/dj-filter.conf).
 
 1. Lancer une instance PipeWire qui charge le filtre, le temps du test :
    ```bash
-   pipewire -c outils/dj-filter.conf &
+   pipewire -c "$PWD/outils/dj-filter.conf" &    # chemin absolu obligatoire
    ```
    Elle crée la sortie virtuelle `dj_filter` : un passe-haut (`bq_highpass`, nommé `hp`) réglé à 20 Hz, donc neutre.
 2. Faire passer Spotify par cette sortie :

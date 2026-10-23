@@ -12,6 +12,9 @@ Statuts : ⬜ à faire · 🚧 en cours · ✅ fait · ⏳ en attente d'une déc
 | Tester un filtre PipeWire sur Spotify | ✅ 2026-10-23 |
 | Tester la connexion extension → programme local | ✅ 2026-10-23 |
 | Relire Smart DJ, étudier Eternal Jukebox et l'existant | ✅ 2026-10-23 |
+| Tester tous les « supposé » : séries A, B, C (maquette E2) | ✅ 2026-10-23 |
+| Écouter les transitions de la maquette E2 | ⏳ avis du développeur |
+| Observer une vraie pub avec l'API `inStreamApi` | ⏳ au premier passage de pub |
 | Documenter le tout | ✅ 2026-10-23 |
 
 ## E1 : prototype sans module audio maison ⏳

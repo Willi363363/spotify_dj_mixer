@@ -9,7 +9,7 @@ Le projet tient sur deux leviers, tous deux vérifiés par des tests :
 
 ## État
 
-Phase de **cadrage** : faisabilité étudiée et testée, aucun code produit encore. Prochaine étape : le prototype E1 (cf. [`docs/roadmap.md`](docs/roadmap.md)).
+Phase de **cadrage** terminée : toutes les pistes ont été testées, y compris une **maquette de l'étape E2** (son retardé en mémoire, mix avec échange des basses, calage du tempo, boucle, freinage) dans [`proto/e2/`](proto/e2/README.md). Prochaine étape : le prototype E1 (cf. [`docs/roadmap.md`](docs/roadmap.md)).
 
 ## Lire la doc
 
@@ -28,4 +28,4 @@ Index complet : [`docs/README.md`](docs/README.md).
 
 ## Scripts
 
-Les scripts qui ont servi aux tests sont dans [`outils/`](outils/README.md), réutilisables tels quels.
+Les scripts qui ont servi aux tests sont dans [`outils/`](outils/README.md), la maquette E2 dans [`proto/e2/`](proto/e2/README.md), réutilisables tels quels.

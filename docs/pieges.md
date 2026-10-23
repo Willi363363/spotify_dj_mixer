@@ -27,8 +27,26 @@ Format : **symptôme → cause → parade**.
 | Coupe des basses inaudible | Haut-parleurs du portable | Casque, ou mesure par enregistrement |
 | Spotify en pause après l'arrêt du filtre de test | La sortie virtuelle disparaît, Spotify s'arrête | Relancer la lecture ; prévoir le cas dans le programme local |
 
+## PipeWire
+
+| Symptôme | Cause | Parade |
+|---|---|---|
+| `can't load config outils/….conf: No such file or directory` | `pipewire -c` cherche un chemin relatif dans ses propres dossiers de config | Toujours un chemin absolu : `pipewire -c "$PWD/outils/….conf"` |
+| Un balayage de filtre claque | Les nœuds `bq_*` changent leurs coefficients d'un coup | Moins de paliers, effets lissés, ou fondu croisé entre deux chaînes (cf. [`tests/07-serie-b-effets.md`](tests/07-serie-b-effets.md)) |
+| Le trou au changement de morceau est mal repéré (200 ms au lieu de 40) | Un passage calme du morceau confondu avec le silence | Ne chercher que du silence numérique (quasi-zéros) |
+
+## Spicetify (interface)
+
+| Symptôme | Cause | Parade |
+|---|---|---|
+| Un test clique sur autre chose que le bouton visé et change la lecture | Recherche d'élément par texte partiel (« DJ » dans « (DJ Mix) ») | Viser par la référence renvoyée par l'API (`button.element`) |
+| Le libellé d'un `Playbar.Button` est introuvable dans la page | Il n'est pas posé en `aria-label`, seulement en info-bulle | Idem |
+
 ## Shell (zsh)
 
 | Symptôme | Cause | Parade |
 |---|---|---|
 | `==== not found` et la suite de la commande ne s'exécute pas | zsh interprète `=mot` comme un chemin de commande | Mettre les séparateurs entre guillemets : `echo '-----'` |
+| `pkill -f motif` tue la commande elle-même (code 144) | Le motif figure dans la ligne de commande du shell qui l'exécute | `pkill -f '[m]otif'`, ou tuer par numéro de processus |
+| `pkill -f 'parec -d dj_in.monitor'` coupe aussi la maquette E2 | La maquette lit avec la même commande | Garder les numéros des enregistrements et ne tuer qu'eux |
+| `wait` ne rend jamais la main | Il attend aussi un programme lancé en arrière-plan qui ne s'arrête pas | `wait $PID1 $PID2`, ou lancer le programme avec `setsid … & disown` |
