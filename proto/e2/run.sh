@@ -7,13 +7,18 @@ set -euo pipefail
 W=$1 MODE=$2 S=$3
 A=${4:-spotify:track:1bepxgCj8gKHOmoSGiW5J3}  # Bubble Like Soup
 B=${5:-spotify:track:1YKIUWyelwdDfeKzwSTBn1}  # Coucounia
+# A, B et MODE finissent dans du JS exécuté dans Spotify : format strict
+URI_RE='^spotify:track:[A-Za-z0-9]{22}$'
+[[ $A =~ $URI_RE && $B =~ $URI_RE && $MODE =~ ^[a-z_]+$ ]] || { echo "uri ou préréglage invalide" >&2; exit 2; }
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
 OUT="$(pactl get-default-sink).monitor"
 LAST=$(cat "$S/dernier-mode" 2>/dev/null || true)
+[[ $LAST =~ ^[a-z_]*$ ]] || LAST=
 
+# 150 s : 32 s avant le saut + 60 s d'avance de la maquette + la transition entendue
 date +%s%3N > "$S/rec-start.txt"
-timeout 90 parec -d dj_in.monitor --format=s16le --rate=44100 --channels=1 --latency-msec=10 > "$S/in.raw" & P1=$!
-timeout 90 parec -d "$OUT" --format=s16le --rate=44100 --channels=1 --latency-msec=10 > "$S/out.raw" & P2=$!
+timeout 150 parec -d dj_in.monitor --format=s16le --rate=44100 --channels=1 --latency-msec=10 > "$S/in.raw" & P1=$!
+timeout 150 parec -d "$OUT" --format=s16le --rate=44100 --channels=1 --latency-msec=10 > "$S/out.raw" & P2=$!
 R=$(node --experimental-websocket "$HERE/outils/cdp-eval.mjs" "$W" \
   "globalThis.__DRY=false; globalThis.__A='$A'; globalThis.__B='$B'; globalThis.__MODE='$MODE'; globalThis.__LAST='$LAST'; $(cat "$HERE/proto/e2/transition.js")" \
   2>&1 | grep -vi experimental)

@@ -1,6 +1,6 @@
 # Architecture
 
-Trois briques. Aucune n'est encore codée : ce document fixe le découpage validé par les tests.
+Trois briques, validées par les tests. L'état actuel est une **maquette** : extension [`spicetify/dj-auto.js`](../spicetify/README.md) (le cerveau), programme Python [`proto/e2/`](../proto/e2/README.md) qui joue le rôle du programme local **et** du module avec avance (E2), relié en HTTP (`/order`, `/state`) plutôt qu'en WebSocket. Le schéma ci-dessous reste la cible.
 
 ```
 ┌──────────────── Spotify desktop ────────────────┐
@@ -58,7 +58,7 @@ Un module maison qui **retarde le son de quelques secondes** et garde ces second
 | Boucle sans silence | Rejouer une mesure depuis la mémoire au lieu de faire sauter Spotify |
 | Masquer les micro-silences | Le module voit le trou arriver et le comble par un court fondu |
 
-**Budget d'avance** : superposer L secondes consomme L secondes d'avance. Il faut une avance au moins égale à la transition la plus longue, et la regagner ensuite (ralentissement imperceptible, ou transitions plus courtes que l'avance).
+**Budget d'avance** : superposer L secondes consomme L secondes d'avance. Il faut une avance au moins égale à la transition la plus longue, et la regagner ensuite. Dans la maquette, les styles doux prolongent A par du synthétique (boucles, roulements) pendant que B monte, ce qui conserve l'avance et permet d'en regagner ; seul le mélange en consomme (détail : [`proto/e2/README.md`](../proto/e2/README.md#avance-et-regain)).
 
 **Points durs** :
 - détecter précisément l'instant du changement de morceau dans le flux (événement de l'extension + repérage du micro-silence) ;

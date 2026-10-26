@@ -10,5 +10,8 @@ Ce qui existe déjà, et ce qu'on en retient pour le projet.
 | [`smart-dj.md`](smart-dj.md) | Extension Spicetify « Smart DJ », code relu | Bonne base pour le cerveau (choix du moment, compatibilité), aucun accès au son |
 | [`eternal-jukebox.md`](eternal-jukebox.md) | Eternal Jukebox, boucles infinies | Algorithme des temps qui se ressemblent ; son pris sur YouTube, donc non transposable |
 | [`etat-de-l-art.md`](etat-de-l-art.md) | Spotify, Apple Music, logiciels de DJ, librespot | AutoMix d'Apple valide notre méthode E2 ; les options Spotify sont Premium |
+| [`audit/`](audit/README.md) | **Audit complet** : données de vrais mixes, pratique des DJ, critique du code, banc de mesure, plan en 15 actions | Nos 6 styles doux sont une seule transition sur une mesure de A répétée ; le mélange n'est presque jamais tiré ; aucune donnée publique pour nos genres |
+| [`mecanique-transitions.md`](mecanique-transitions.md) | **Comment Spotify et Vande Veire construisent une transition** : courbes, échange des basses, placement | La superposition finit sur le drop de B, qui est déjà à plein volume (sans graves) ; le drop est un échange de fréquences, pas une marche |
+| [`veille-2026-10.md`](veille-2026-10.md) | Veille du 26/10 : Apple iOS 26-27, Spotify Mix (Rise, Wave, Melt), djay, DJ.Studio | Boucler l'intro de B pour une montée longue ; effet sur A qui change toutes les 2 mesures ; jamais de repli en fondu |
 
-Recherches faites le 2026-10-23.
+Recherches faites le 2026-10-23 et le 2026-10-26.

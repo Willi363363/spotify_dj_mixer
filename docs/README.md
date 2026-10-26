@@ -19,6 +19,12 @@ Chaque fichier traite un seul sujet et reste sous 200 lignes. Une information vi
 | [`tests/`](tests/README.md) | Un fichier par test : protocole, mesures, conclusion |
 | [`recherche/`](recherche/README.md) | Ce qui existe déjà et ce qu'on en retient |
 
+## Revue
+
+| Dossier | Contenu |
+|---|---|
+| [`revue/`](revue/README.md) | Revue du 2026-10-26 : diagnostic, bugs, plan d'amélioration |
+
 ## Pratique
 
 | Fichier | Contenu |

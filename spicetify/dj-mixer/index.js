@@ -18,7 +18,8 @@ const PAIRS = [
   ['Alpha → Laptop', '2dVDbbS9W6n6YY80R4aJdZ', '7e2vCAtcYXuM8JOUqIZ9GQ'],
 ];
 const MODES = [['auto', 'Auto'], ['montee', 'Montée'], ['melange', 'Mélange'], ['montee_courte', 'Montée courte'],
-  ['echo_doux', 'Écho'], ['retour_doux', 'Retour arrière'], ['frein_doux', 'Frein'], ['filtre', 'Balayage de filtre']];
+  ['echo_doux', 'Écho'], ['retour_doux', 'Retour arrière'], ['frein_doux', 'Frein'], ['filtre', 'Balayage de filtre'],
+  ['drop_swap', 'Drop swap']];
 const KEYS = ['Do', 'Do#', 'Ré', 'Mib', 'Mi', 'Fa', 'Fa#', 'Sol', 'Lab', 'La', 'Sib', 'Si'];
 const C = { a: '#4f8cff', b: '#ff5ea8', zone: '#ffb020', head: '#1ed760', line: 'rgba(255,255,255,.10)', sub: 'rgba(255,255,255,.6)' };
 
@@ -39,7 +40,13 @@ const CSS = `
 .djm-switch.on .djm-track { background: ${C.head}; }
 .djm-switch.on .djm-track::after { transform: translateX(24px); }
 .djm-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.djm select { flex: 1 1 140px; min-width: 0; padding: 7px 8px; border-radius: 8px; background: rgba(255,255,255,.06); color: var(--spice-text); border: 1px solid ${C.line}; }
+.djm select { flex: 1 1 140px; min-width: 0; padding: 8px 30px 8px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  appearance: none; cursor: pointer; color: #fff; border: 1px solid rgba(255,255,255,.14); transition: border-color .2s, background-color .2s;
+  background: #2a2a2a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23fff' stroke-width='1.6' fill='none'/%3E%3C/svg%3E") no-repeat right 12px center; }
+.djm select:hover { background-color: #333; }
+.djm select:focus { outline: none; border-color: ${C.head}; }
+/* le menu déroulant s'ouvre avec le fond du système (clair sous Linux) : sans fond propre, texte blanc illisible */
+.djm option { background: #1f1f1f; color: #fff; }
 .djm button { padding: 7px 14px; border-radius: 999px; border: 0; font-weight: 700; cursor: pointer; background: rgba(255,255,255,.1); color: var(--spice-text); transition: transform .12s, opacity .2s; }
 .djm button:hover:not(:disabled) { transform: scale(1.04); }
 .djm button.go { background: ${C.head}; color: #000; }
@@ -86,7 +93,13 @@ function useAnalysis(uri) {
     if (!uri) return set(null);
     if (analyses.has(uri)) return set(analyses.get(uri));
     let alive = true;
-    Spicetify.getAudioData(uri).then((d) => { analyses.set(uri, d); if (alive) set(d); }).catch(() => {});
+    // Un morceau sans analyse ne fait pas échouer l'appel : il rend {code: 404, …}. Pris pour une analyse,
+    // il faisait planter la page (« Something went wrong ») : on le traite comme une absence d'analyse.
+    Spicetify.getAudioData(uri).then((d) => {
+      const ok = d?.track && d?.beats?.length ? d : null;
+      analyses.set(uri, ok);
+      if (alive) set(ok);
+    }).catch(() => {});
     return () => { alive = false; };
   }, [uri]);
   return a;
@@ -108,7 +121,10 @@ function view(st) {
   const x = st?.current ?? st?.next ?? st?.last ?? null;
   if (!x) return { aUri: st?.heard?.uri, aPos: st?.heard?.pos_s, x: null };
   const t = st.current ? st.current.elapsed_s : st.next ? -st.next.in_s : st.last.elapsed_s;
-  if (t < x.dur_s) return { aUri: x.from_uri ?? st.heard?.uri, aPos: (x.sortieA ?? 0) - x.dur_s + t, x, t, bUri: x.to_uri };
+  // dans A, la transition ne rejoue que real_s secondes réelles avant la sortie ; ensuite A est prolongé
+  // (boucles, roulements) : l'aiguille reste sur la sortie
+  const real = x.real_s ?? x.dur_s;
+  if (t < x.dur_s) return { aUri: x.from_uri ?? st.heard?.uri, aPos: (x.sortieA ?? 0) - real + Math.min(t, real), x, t, bUri: x.to_uri };
   return { aUri: x.to_uri, aPos: st.heard?.pos_s, x, t, after: true };
 }
 
@@ -210,17 +226,48 @@ function Frise({ x, t }) {
 }
 
 const TAGS = { melange: '#1ed760', montee: '#ffb020', montee_courte: '#ff8a3d', echo_doux: '#7aa7ff', retour_doux: '#c38bff',
-  frein_doux: '#ff5e7a', filtre: '#4fd1c5' };
-function History() {
+  frein_doux: '#ff5e7a', filtre: '#4fd1c5', drop_swap: '#f6e05e', secours: '#a0aec0' };
+const notes = new Map();  // transition (heure) → note donnée, pour ne pas la redemander
+// Chaque transition se note de 1 à 5 : la note part dans le journal d'écoute de la maquette
+// (docs/tests/notes-ecoute.jsonl), qui sert à régler les probabilités du choix automatique.
+// Une transition est listée dès le saut de Spotify mais ne s'entend qu'avec l'avance de la maquette :
+// d'ici là, pas de note possible.
+function History({ delay }) {
   const [, force] = useState(0);
   useEffect(() => { const t = setInterval(() => force((n) => n + 1), 1000); return () => clearInterval(t); }, []);
   const log = window.DJ?.status?.log ?? [];
   if (!log.length) return h('div', { style: { opacity: 0.55, fontSize: 12 } }, 'Aucune transition automatique pour l\'instant.');
   const ago = (ms) => { const s = Math.round((Date.now() - ms) / 1000); return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min`; };
-  return h('div', null, log.slice(0, 5).map((e) => h('div', { key: e.at, className: 'djm-hist' },
-    h('span', { className: 'djm-tag', style: { background: TAGS[e.mode] ?? '#ccc' } }, e.label),
-    h('span', { className: 'djm-ell', style: { flex: 1 } }, `${e.A} → ${e.B}`),
-    h('span', { style: { opacity: 0.5, flex: 'none' } }, `il y a ${ago(e.at)}`))));
+  const rate = async (e, note) => {
+    notes.set(e.at, note); force((n) => n + 1);
+    try {
+      const r = await fetch(`${MAQUETTE}/rating`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note, mode: e.mode, from: e.A, to: e.B, raison: e.raison ?? '' }) });
+      if (!r.ok) throw new Error();
+    } catch { notes.delete(e.at); force((n) => n + 1); }
+  };
+  return h('div', null, log.slice(0, 5).map((e) => {
+    const heardAt = e.at + (delay ?? 0) * 1000, waiting = Date.now() < heardAt;
+    return h('div', { key: e.at, className: 'djm-hist', style: { opacity: waiting ? 0.6 : 1 } },
+      h('span', { className: 'djm-tag', style: { background: TAGS[e.mode] ?? '#ccc' } }, e.label),
+      h('span', { className: 'djm-ell', style: { flex: 1 }, title: e.raison }, `${e.A} → ${e.B}`),
+      waiting ? null : h('span', { style: { flex: 'none', display: 'flex', gap: 2 } }, [1, 2, 3, 4, 5].map((n) => h('span', {
+        key: n, title: `Noter ${n}/5`, onClick: () => rate(e, n),
+        style: { cursor: 'pointer', color: (notes.get(e.at) ?? 0) >= n ? C.zone : 'rgba(255,255,255,.25)' } }, '★'))),
+      h('span', { style: { opacity: 0.5, flex: 'none' } },
+        waiting ? `s'entend dans ${Math.ceil((heardAt - Date.now()) / 1000)} s` : `il y a ${ago(heardAt)}`));
+  }));
+}
+
+// Santé de la maquette : avance sur Spotify (un mélange en consomme, les autres styles la regagnent)
+// et dernier incident (transition abandonnée, refusée) de la dernière minute.
+function Health({ st }) {
+  const low = st.delay_s < 0.6 * (st.target_s ?? 60);
+  const ev = (st.events ?? []).filter((e) => Date.now() / 1000 - e.t < 60).slice(-1)[0];
+  return h('div', { style: { fontSize: 12, marginTop: 4 } },
+    h('div', { style: { opacity: low ? 1 : 0.55, color: low ? '#ff5e7a' : undefined } },
+      `${st.delay_s.toFixed(0)} s d'avance sur Spotify (cible ${(st.target_s ?? 60).toFixed(0)} s), qui joue déjà « ${st.spotify?.name ?? '…'} »`),
+    ev ? h('div', { style: { color: '#ff5e7a' } }, ev.msg) : null);
 }
 
 function Queue({ plan }) {
@@ -232,7 +279,11 @@ function Queue({ plan }) {
       const rows = [];
       for (const t of next) {
         let tempo = null, key = null;
-        try { const a = analyses.get(t.uri) ?? await Spicetify.getAudioData(t.uri); analyses.set(t.uri, a); tempo = Math.round(a.track.tempo); key = KEYS[a.track.key]; } catch {}
+        try {
+          let a = analyses.get(t.uri);
+          if (a === undefined) { a = await Spicetify.getAudioData(t.uri); a = a?.track && a?.beats?.length ? a : null; analyses.set(t.uri, a); }
+          if (a) { tempo = Math.round(a.track.tempo); key = KEYS[a.track.key]; }
+        } catch {}
         rows.push({ uri: t.uri, name: t.metadata?.title ?? t.uri, artist: t.metadata?.artist_name ?? '', tempo, key });
       }
       if (alive) set(rows);
@@ -318,7 +369,7 @@ function App() {
     else if (v.t < x.dur_s) { headline = ph ? ph[0] : `${x.label} en cours`; count = `encore ${(x.dur_s - v.t).toFixed(1)} s, puis ${x.to ?? 'B'} seul`; }
     else { headline = `${x.to ?? 'B'} seul`; count = `${x.label} terminée il y a ${(v.t - x.dur_s).toFixed(1)} s`; }
   }
-  const zone = x && x.sortieA != null && !v.after ? [x.sortieA - x.dur_s, x.sortieA] : null;
+  const zone = x && x.sortieA != null && !v.after ? [x.sortieA - (x.real_s ?? x.dur_s), x.sortieA] : null;
   const twoCircles = !!v.bUri;
   const big = Math.max(150, Math.min(twoCircles ? box.w * 0.56 : box.w * 0.8, box.h - 50));
   const small = Math.max(110, Math.min(box.w - big - 24, big * 0.7));
@@ -330,7 +381,7 @@ function App() {
       card('Dans tes oreilles', { live },
         h('div', { className: 'djm-head', key: headline }, headline),
         h('div', { className: 'djm-count' }, offline ? 'Maquette éteinte : lance proto/e2/e2.py.' : count),
-        st ? h('div', { style: { opacity: 0.55, fontSize: 12, marginTop: 4 } }, `${st.delay_s.toFixed(0)} s de retard sur Spotify, qui joue déjà « ${st.spotify?.name ?? '…'} »`) : null),
+        st ? h(Health, { st }) : null),
       card(null, { live, style: { flex: 1, display: 'flex', flexDirection: 'column', gap: 8 } },
         h('div', { ref: circles, style: { flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 } },
           box.w ? h(Circle, { analysis: aAn, pos: v.aPos, zone, live, color: C.a, size: big, title: v.after ? x?.to : (x?.from ?? st?.heard?.name), sub: aAn ? `${Math.round(aAn.track.tempo)} BPM · ${KEYS[aAn.track.key]}` : '' }) : null,
@@ -343,7 +394,7 @@ function App() {
         x?.raison ? h('div', { style: { opacity: 0.7, fontSize: 12 } }, `Pourquoi : ${x.raison}`) : null,
         x ? h('div', null, Object.entries(x.ingredients ?? {}).map(([k, val]) => h('span', { key: k, className: 'djm-chip' }, h('b', { style: { opacity: 0.6 } }, `${k} `), val))) : null),
       card('À venir dans la file', { style: { flex: 1, overflow: 'hidden' } }, h(Queue, { plan })),
-      card('Dernières transitions', null, h(History),
+      card('Dernières transitions', null, h(History, { delay: st?.delay_s }),
         h('div', { style: { borderTop: `1px solid ${C.line}`, marginTop: 8, paddingTop: 8 } }, h(Manual, { st })))));
 }
 

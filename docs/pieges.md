@@ -26,6 +26,7 @@ Format : **symptôme → cause → parade**.
 | Une boucle « sonne bizarre » alors que les chiffres de Spotify sont bons | `getProgress()` annonce la position **avant** que le son ne reparte : ~80 ms d'écart | Mesurer sur un enregistrement de la sortie son, jamais sur la position annoncée |
 | Coupe des basses inaudible | Haut-parleurs du portable | Casque, ou mesure par enregistrement |
 | Spotify en pause après l'arrêt du filtre de test | La sortie virtuelle disparaît, Spotify s'arrête | Relancer la lecture ; prévoir le cas dans le programme local |
+| La maquette ne trouve pas le changement de morceau (« aucun silence ») en mode auto | Un saut **dans la playlist** (`skipTo`) enchaîne A et B sans silence ni clic exploitable ; seul le saut vers un morceau seul laisse un trou | Changement placé à l'heure de l'ordre + 90 ms (`SWITCH_S` dans `e2.py`), avec une marge |
 
 ## PipeWire
 

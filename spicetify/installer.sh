@@ -2,8 +2,9 @@
 # Installe dans Spotify, via Spicetify :
 # - l'app « Mode DJ » (page dans la barre de Spotify) ;
 # - l'extension dj-auto.js (mode DJ automatique, toujours active, allumée depuis l'app).
-# Liens symboliques vers le dépôt (une modification du code ne demande qu'un rechargement de Spotify),
-# inscription dans la config, puis `spicetify apply` (redémarre Spotify).
+# Liens symboliques vers le dépôt, inscription dans la config, puis `spicetify apply` (redémarre Spotify).
+# Spicetify copie les fichiers au moment de `apply` : toute modification du code demande un nouveau
+# `spicetify apply`, un rechargement de Spotify garde l'ancienne version.
 # Usage : spicetify/installer.sh            Désinstaller : spicetify/installer.sh --retirer
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)

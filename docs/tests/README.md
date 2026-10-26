@@ -13,6 +13,7 @@ Tests réalisés le **2026-10-23** sur la machine de [`../environnement.md`](../
 | 07 | [Série B : effets](07-serie-b-effets.md) | Égaliseur, écho, clics des balayages | ✅ égaliseur et écho, ⚠️ clics |
 | 08 | [Série C : maquette E2](08-serie-c-maquette-e2.md) | Son retardé, mix avec échange des basses, calage du tempo, boucle, freinage | ✅ principe validé |
 | 09 | [Écoute de la maquette](09-ecoute-maquette.md) | Les transitions sonnent-elles « DJ » ? | ✅ **montée continue validée** ; ❌ mix par fondu rejeté |
+| 10 | [Preuve du calage](10-calage.md) | Les temps de A et B tombent-ils ensemble pendant une superposition ? | ❌ ancien calage : ~½ temps d'erreur ; ✅ grille de Spotify + correction : **0 à 10 ms** sur 5 paires rap FR |
 
 ## Règle
 
