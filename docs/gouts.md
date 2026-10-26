@@ -13,6 +13,7 @@ Source unique des goûts exprimés à l'écoute, mise à jour **à chaque essai*
 | Le **mélange calé** temps par temps (tempo qui glisse, échange des basses, filtre) | « clean de fou » | 6 |
 | **B qui monte sous la fin de la montée** avant son drop | « ça va, je valide », « c'était doux » | 11, 13 |
 | **Comprendre ce qui se passe** : frise A → B, étapes nommées, heures exactes | demande d'affichage | 8 |
+| Le **placement** automatique des transitions (où A sort, où B entre) | « le placement est validé » | 14 |
 
 ## N'aime pas
 
@@ -21,7 +22,8 @@ Source unique des goûts exprimés à l'écoute, mise à jour **à chaque essai*
 | Un **simple fondu de volume**, même calé | « juste un fondu, nul » | 1, 2 |
 | Un **blanc avant le drop** | « pas si ouf » | 3 |
 | La **coupe sèche** sur le temps | « absolument horrible » | 7 |
-| **B qui surgit d'un coup** au drop, sans préparation | « sec, pas smooth », « horrible », « l'arrivée du deuxième était sèche » | 10, 12 |
+| **B qui surgit d'un coup** au drop, sans préparation | « sec, pas smooth », « horrible », « l'arrivée du deuxième était sèche », « parfois vachement brutale, brève, sèche » | 10, 12, 14 |
+| **Toujours la même transition** | « toujours le même style, même méthode, aucune originalité » | 14 |
 | Des tests sur des **morceaux déjà entendus** trop souvent | « ça fait trop de fois que j'entends » | 23/10 |
 
 ## Ce qu'on en retient

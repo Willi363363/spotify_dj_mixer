@@ -44,6 +44,7 @@ Format : **symptôme → cause → parade**.
 
 | Symptôme | Cause | Parade |
 |---|---|---|
+| Une modification de l'app ou de l'extension n'apparaît pas dans Spotify, même après rechargement | Spicetify **copie** extensions et apps dans Spotify au moment de `apply` ; les liens symboliques ne sont pas suivis ensuite | `spicetify apply` après chaque modification |
 | Un test clique sur autre chose que le bouton visé et change la lecture | Recherche d'élément par texte partiel (« DJ » dans « (DJ Mix) ») | Viser par la référence renvoyée par l'API (`button.element`) |
 | Le libellé d'un `Playbar.Button` est introuvable dans la page | Il n'est pas posé en `aria-label`, seulement en info-bulle | Idem |
 

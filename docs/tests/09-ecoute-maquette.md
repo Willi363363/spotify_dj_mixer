@@ -18,6 +18,7 @@
 | 10 | 26/10 | Montée, routage corrigé | idem | ✅ basses qui disparaissent et roulements qui accélèrent aimés, disparition de A « clean de fou » ; ❌ B « apparaît d'un coup sans prévenir, sec, pas smooth » |
 | 12 | 26/10 | Auto : mélange tenté puis **refusé** (accord −0,25), repli sur une montée **sans montée douce** et prête 23 s trop tard (avance de 30 s insuffisante) | « Tic » → « La Choré Des Shattas » (104 BPM) | fin de A « clean » ; ❌ arrivée de B « sèche ». Corrigé : avance de 45 s, B toujours lancé 2 mesures avant, transition trop tardive abandonnée |
 | 13 | 26/10 | Auto : mélange **refusé dès 2 mesures** (accord 0,06), **repli en montée douce** prêt avec 13 s de marge ; avance de 50 s | « Tic » → « La Choré Des Shattas » (104 BPM) | ✅ « ça me va, je valide, c'était doux » |
+| 14 | 26/10 | **Mode DJ automatique** (extension dj-auto) sur la playlist bouyon : montées douces enchaînées seules, morceau après morceau | « Sé Miimii » → « Laptop » → « Paddle »… | ✅ **placement validé** ; ❌ « toujours le même style, aucune originalité » ; ❌ arrivée de B « parfois brutale, brève, sèche » (B ne montait que sur 2 mesures, 3 s à 160 BPM) ; interface « à revoir » |
 | 11 | 26/10 | **Montée douce** : B lancé 2 mesures avant son drop, qui montent sous les roulements (filtre qui s'ouvre, volume 0 → 0,85), puis drop sans raccord | « Money Pull Up » → « SO COMAN » (100 BPM) | ✅ « ça va, je valide » |
 
 Avant l'essai 6, le même mélange sur « Doglife! Vcvc » → « Supla » a été **refusé** par la maquette (accord des grosses caisses 0,11) : le repli fonctionne.

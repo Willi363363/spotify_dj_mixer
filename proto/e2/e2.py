@@ -24,15 +24,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)  # python -I n'ajoute pas le dossier du script au chemin d'import
 
 from recettes import ALIASES, CH, PHASES, PRESETS, SR, Refus  # noqa: E402
-from rendu import RENDERERS  # noqa: E402
+from rendu import DOUX, RENDERERS  # noqa: E402
 
 # Avance en mémoire : un mélange de 8 mesures doit recevoir tout B puis être rendu avant que la lecture
 # n'atteigne son début, soit au moins 2 × sa durée + 2 mesures + le calcul (~50 s à 100 BPM).
 D = float(sys.argv[1]) if len(sys.argv) > 1 else 50.0
-# Pour les boutons de l'écran : adresse de débogage de Spotify et dossier de travail de run.sh
+# Pour les boutons : dossier de travail de run.sh ; l'adresse de débogage de Spotify est retrouvée à
+# chaque lancement (elle change à chaque redémarrage de Spotify), DJ_WS ne sert que de secours.
 WS = os.environ.get("DJ_WS", "")
 WORK = os.environ.get("DJ_WORK", "")
 ORIGIN = "http://127.0.0.1:47802"
+# Pages autorisées à interroger la maquette et à lancer une transition : l'écran local et l'app Spicetify
+ORIGINS = {ORIGIN, "https://xpui.app.spotify.com"}
+levels = [0.0] * 16  # niveau de 16 bandes de fréquences de ce qui part vers les haut-parleurs (visualiseur)
 run_proc = None      # run.sh en cours, lancé depuis l'écran
 last_request = None  # dernière transition demandée depuis l'écran, pour « Rejouer »
 BLOCK = 1024
@@ -72,7 +76,33 @@ def track_at(sample):
         return None
     s, info = tracks[i]
     pos = info["pos_ms"] / 1000 + (0 if info.get("paused") else (sample - s) / SR)
-    return {"name": info["name"], "artist": info["artist"], "pos_s": pos, "dur_s": info["dur_ms"] / 1000}
+    return {"name": info["name"], "artist": info["artist"], "uri": info.get("uri"), "pos_s": pos,
+            "dur_s": info["dur_ms"] / 1000}
+
+
+def spotify_ws():
+    """Adresse de débogage de la page de Spotify, relue à chaque fois (elle change au redémarrage)."""
+    import urllib.request
+    try:
+        pages = json.load(urllib.request.urlopen("http://127.0.0.1:9222/json/list", timeout=2))
+        return next(p["webSocketDebuggerUrl"] for p in pages if p.get("url", "").startswith("https://xpui.app.spotify.com/index"))
+    except Exception:
+        return WS
+
+
+_BANDS = np.geomspace(40, 16000, 17)
+
+
+def update_levels(block):
+    """Niveaux de 16 bandes (40 Hz à 16 kHz) d'un bloc qui part vers les haut-parleurs, lissés."""
+    mono = block.mean(axis=1)
+    spec = np.abs(np.fft.rfft(mono * np.hanning(len(mono))))
+    f = np.fft.rfftfreq(len(mono), 1 / SR)
+    for i in range(16):
+        sel = spec[(f >= _BANDS[i]) & (f < _BANDS[i + 1])]
+        db = 20 * np.log10(sel.mean() + 1e-9) if len(sel) else -120
+        v = min(1.0, max(0.0, (db + 10) / 50))  # −10 à +40 dB ramenés sur 0..1
+        levels[i] = max(v, levels[i] * 0.85)      # retombée douce
 
 
 def state():
@@ -83,7 +113,7 @@ def state():
     if plan:
         p = plan[0]
         to = track_at(p[2] + 3 * SR)  # le nom de B arrive après son son : on le relit 3 s après la reprise
-        nxt = {**p[4], "to": to and to["name"], "mode": p[3], "in_s": (p[0] - rp) / SR}
+        nxt = {**p[4], "to": to and to["name"], "to_uri": to and to.get("uri"), "mode": p[3], "in_s": (p[0] - rp) / SR}
     cur = {**current, "elapsed_s": time.time() - current["t0"]} if current else None
     done = None
     if last and time.time() - last["t_end"] < 20:
@@ -91,14 +121,15 @@ def state():
     busy = run_proc is not None and run_proc.poll() is None
     return {"heard": heard, "spotify": track_at(written), "delay_s": (written - rp) / SR,
             "next": nxt, "current": cur, "last": done, "busy": busy, "last_request": last_request,
-            "can_run": bool(WS and WORK)}
+            "can_run": bool(WORK), "levels": [round(v, 3) for v in levels]}
 
 
 def launch(req):
     """Lance run.sh pour la paire et le préréglage demandés depuis l'écran ; une seule à la fois."""
     global run_proc, last_request
-    if not (WS and WORK):
-        return 503, "maquette lancée sans DJ_WS / DJ_WORK : boutons indisponibles"
+    ws = spotify_ws()
+    if not (ws and WORK):
+        return 503, "Spotify n'est pas en mode débogage, ou maquette lancée sans DJ_WORK"
     if run_proc is not None and run_proc.poll() is None:
         return 409, "une transition est déjà en préparation"
     if plan or current:
@@ -113,41 +144,58 @@ def launch(req):
         except FileNotFoundError:
             pass
     last_request = {"mode": mode, "a": a, "b": b, "name": req.get("name")}
-    run_proc = subprocess.Popen(["bash", os.path.join(HERE, "run.sh"), WS, mode, WORK, a, b],
+    run_proc = subprocess.Popen(["bash", os.path.join(HERE, "run.sh"), ws, mode, WORK, a, b],
                                 stdout=open(os.path.join(WORK, "run.out"), "w"), stderr=subprocess.STDOUT)
     log(f"écran : transition demandée ({mode}, {req.get('name')})")
     return 202, "lancée"
 
 
 class Screen(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path.startswith("/state"):
-            body, kind = json.dumps(state()).encode(), "application/json"
-        else:
-            body, kind = open(os.path.join(HERE, "ecran.html"), "rb").read(), "text/html; charset=utf-8"
-        self.send_response(200)
+    def _cors(self):
+        """Autorise l'app Spicetify (page de Spotify) à lire l'état et lancer une transition."""
+        origin = self.headers.get("Origin")
+        if origin in ORIGINS:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Methods", "GET, POST")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Vary", "Origin")
+
+    def _send(self, code, body, kind):
+        self.send_response(code)
+        self._cors()
         self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
+    def do_OPTIONS(self):  # pré-vérification du navigateur avant un POST en JSON
+        self._send(204 if self.headers.get("Origin") in ORIGINS else 403, b"", "text/plain")
+
+    def do_GET(self):
+        if self.path.startswith("/state"):
+            self._send(200, json.dumps(state()).encode(), "application/json")
+        else:
+            self._send(200, open(os.path.join(HERE, "ecran.html"), "rb").read(), "text/html; charset=utf-8")
+
     def do_POST(self):
-        # Seule la page de l'écran peut lancer une transition : une autre page web ouverte dans le
-        # navigateur pourrait sinon envoyer cette demande à la maquette.
-        if self.path != "/run" or self.headers.get("Origin") != ORIGIN:
+        # Seules l'écran et l'app Spicetify peuvent lancer une transition : une autre page web ouverte
+        # dans le navigateur pourrait sinon envoyer cette demande à la maquette.
+        if self.path not in ("/run", "/order") or self.headers.get("Origin") not in ORIGINS:
             code, msg = 403, "refusé"
         else:
             try:
                 n = min(int(self.headers.get("Content-Length", 0)), 4096)
-                code, msg = launch(json.loads(self.rfile.read(n) or b"{}"))
+                req = json.loads(self.rfile.read(n) or b"{}")
+                if self.path == "/run":
+                    code, msg = launch(req)
+                elif valid_order(req):  # ordre de l'extension dj-auto : le saut est déjà fait dans Spotify
+                    threading.Thread(target=handle_order, args=(req,), daemon=True).start()
+                    code, msg = 202, "ordre reçu"
+                else:
+                    code, msg = 400, "ordre invalide"
             except (ValueError, json.JSONDecodeError):
                 code, msg = 400, "demande invalide"
-        body = json.dumps({"message": msg}).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._send(code, json.dumps({"message": msg}).encode(), "application/json")
 
     def log_message(self, *a):
         pass
@@ -225,7 +273,7 @@ def prepare(o):
     pre = int(o.get("pre_s", 0) * SR)
 
     def render(name):
-        if name == "montee":
+        if name in DOUX:
             return RENDERERS[name](Memoire, end_a, start_b, bar, o["ratio"], pre=pre)
         return RENDERERS[name](Memoire, end_a, start_b + pre, bar, o["ratio"])
     try:
@@ -248,21 +296,40 @@ def control():
                 tracks.append((n, o))
                 track_samples.append(n)
             continue
-        log("ordre reçu", o)
-        try:
-            start, seg, resume, preset, raison = prepare(o)
-            if start < rp + int(0.5 * SR):
-                # Prête trop tard : la jouer maintenant ramènerait A en arrière. On laisse la musique continuer.
-                log(f"« {preset} » prête trop tard ({(rp - start) / SR:+.1f} s) : transition abandonnée")
-                continue
-            frm = track_at(start)
-            p = PRESETS[preset]
-            info = {"from": frm and frm["name"], "bar_s": o["bar_s"], "dur_s": max(len(seg) / SR, 0.01),
-                    "label": p["label"], "ingredients": p["ingredients"], "raison": raison, **PHASES[preset]}
-            plan.append((start, seg, resume, preset, info))
-            log(f"transition prête : {p['label']}, {len(seg) / SR:.2f} s de segment")
-        except Exception as e:  # la maquette doit survivre à un ordre raté
-            log("échec de préparation :", repr(e))
+        threading.Thread(target=handle_order, args=(o,), daemon=True).start()
+
+
+def handle_order(o):
+    """Prépare puis programme une transition (ordre de run.sh en UDP, ou de l'extension dj-auto en HTTP)."""
+    log("ordre reçu", o)
+    try:
+        start, seg, resume, preset, raison = prepare(o)
+        if start < rp + int(0.5 * SR):
+            # Prête trop tard : la jouer maintenant ramènerait A en arrière. On laisse la musique continuer.
+            log(f"« {preset} » prête trop tard ({(rp - start) / SR:+.1f} s) : transition abandonnée")
+            return
+        frm = track_at(start)
+        p = PRESETS[preset]
+        info = {"from": frm and frm["name"], "from_uri": frm and frm.get("uri"), "bar_s": o["bar_s"],
+                "dur_s": max(len(seg) / SR, 0.01), "label": p["label"], "ingredients": p["ingredients"],
+                "raison": raison, "resume": resume, **PHASES[preset],
+                # positions dans les morceaux, pour les cercles de l'app : fin de la transition dans A,
+                # point d'entrée (drop) dans B
+                "sortieA": o.get("sortieA"), "entreeB": o.get("entreeB")}
+        plan.append((start, seg, resume, preset, info))
+        plan.sort(key=lambda x: x[0])  # deux ordres préparés en parallèle restent dans l'ordre de lecture
+        log(f"transition prête : {p['label']}, {len(seg) / SR:.2f} s de segment")
+    except Exception as e:  # la maquette doit survivre à un ordre raté
+        log("échec de préparation :", repr(e))
+
+
+def valid_order(o):
+    """Un ordre de l'extension doit avoir les champs attendus, de bons types et un préréglage connu."""
+    try:
+        return (o.get("mode") in {*PRESETS, *ALIASES} and float(o["t_wall"]) > 0 and 0.3 < float(o["bar_s"]) < 5
+                and 0.3 < float(o["ratio"]) < 3 and 0 <= float(o.get("pre_s", 0)) < 15)
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def writer():
@@ -282,10 +349,12 @@ def writer():
             # le son sort ~60 ms après l'écriture (latence de pacat) : la notification tombe avec la transition
             subprocess.Popen(["notify-send", "Maquette E2", f"Maintenant : {info['label']}"])
             to = track_at(resume + 3 * SR)
-            current = {**info, "to": to and to["name"], "mode": preset, "t0": time.time() + 0.06}
+            current = {**info, "to": to and to["name"], "to_uri": to and to.get("uri"), "mode": preset,
+                       "t0": time.time() + 0.06}
             plan.pop(0)
             for k in range(0, len(seg), BLOCK):  # par blocs, pour que l'écran suive la progression
                 out.stdin.write(seg[k:k + BLOCK].tobytes())
+                update_levels(seg[k:k + BLOCK])
             last = {**current, "t_end": current["t0"] + len(seg) / SR}
             current = None
             log(f"segment joué ({len(seg) / SR:.2f} s), reprise du flux, avance restante {(written - resume) / SR:.1f} s")
@@ -295,6 +364,8 @@ def writer():
             time.sleep(0.005)
         n = min(BLOCK, plan[0][0] - rp) if plan and plan[0][0] > rp else BLOCK
         out.stdin.write(buf[rp:rp + n].tobytes())
+        if n >= 256:
+            update_levels(buf[rp:rp + n])
         rp += n
 
 

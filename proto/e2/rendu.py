@@ -32,7 +32,12 @@ def montee(m, end_a, start_b, bar, ratio, pre=0):
     ces mesures montent sous les derniers roulements (sans basses, filtre qui s'ouvre) et B enchaîne
     sur son drop sans raccord : son arrivée n'est plus sèche."""
     if pre:
-        return _montee_douce(m, end_a, start_b, bar, pre)
+        return _douce(m, end_a, start_b, bar, pre, _rolls(m, end_a, bar), "montée")
+    return end_a - 8 * bar, _rolls(m, end_a, bar), start_b + entry_kick(m, start_b, bar // 4)
+
+
+def _rolls(m, end_a, bar):
+    """Effet de la montée sur A : 8 mesures, graves qui partent, puis roulements 1 → 1/16 de temps."""
     beat = bar // 4
     a = m.buf[end_a - 8 * bar:end_a].copy()
     parts = [edges(band(a[k * beat:(k + 1) * beat], lo=20 + 280 * (k / 15) ** 2), 2) for k in range(16)]
@@ -45,26 +50,114 @@ def montee(m, end_a, start_b, bar, ratio, pre=0):
             r = r0 + (r1 - r0) * i / max(1, count - 1)
             parts.append(edges(band(pitched(piece, r), lo=lo) * (0.8 + 0.2 * i / count), 1))
     seg = np.concatenate(parts)
-    seg = np.concatenate([seg, np.zeros((8 * bar - len(seg), CH), dtype=np.float32)])  # 8 mesures pile
-    return end_a - 8 * bar, seg, start_b + entry_kick(m, start_b, beat)
+    return np.concatenate([seg, np.zeros((8 * bar - len(seg), CH), dtype=np.float32)])  # 8 mesures pile
 
 
-def _montee_douce(m, end_a, start_b, bar, pre):
-    beat = bar // 4
-    _, seg, _ = montee(m, end_a, start_b + pre, bar, 1.0)  # la montée seule, B recalé plus bas
+# ─── Transitions douces ─────────────────────────────────────────────────────────────────────────────
+# Règles tirées de l'écoute (docs/gouts.md) : B ne surgit jamais d'un coup. Il monte sous la fin de A
+# (filtre qui s'ouvre, volume qui monte) sur jusqu'à 4 mesures, et à son drop la dernière note de A
+# résonne encore un temps en écho par-dessus lui. Chaque style ne fait que changer ce que A fait pendant
+# ce temps.
+
+def _douce(m, end_a, start_b, bar, pre, a_eff, name):
+    """Assemble un effet sur A (tableau finissant à end_a), la montée de B dessous et l'atterrissage."""
+    beat, L = bar // 4, len(a_eff)
     drop = start_b + pre + entry_kick(m, start_b + pre, beat)
-    n = min(drop - start_b, 2 * bar, len(seg))  # au plus les 2 dernières mesures de la montée
-    m.wait(drop + beat)
-    b_pre = m.buf[drop - n:drop].copy()
-    # B monte sous les roulements : filtre qui s'ouvre de 1500 à 120 Hz, volume de 0 à 0,85
-    b_pre = sweep(b_pre, lo=lambda t: 1500 * (120 / 1500) ** t) * smooth(n, 0.0, 0.85)
-    seg = seg.copy()
-    seg[-n:] = seg[-n:] * smooth(n, 1.0, 0.55) + b_pre  # les roulements s'effacent un peu pour faire place
+    n = min(drop - start_b, 4 * bar, L)
+    m.wait(drop + 2 * beat)
+    seg = a_eff.copy()
+    if n >= beat:  # B a été lancé en avance : il monte sous la fin de A
+        b_pre = m.buf[drop - n:drop].copy()
+        # filtre qui s'ouvre de 2500 à 60 Hz (lentement au début), volume de 0 à 0,9
+        b_pre = sweep(b_pre, lo=lambda t: 2500 * (60 / 2500) ** (t ** 0.8)) * smooth(n, 0.0, 0.9)
+        seg[-n:] = seg[-n:] * smooth(n, 1.0, 0.45) + b_pre  # A s'efface à mesure que B monte
+    else:
+        n = 0
+    # Atterrissage : premier temps de B à plein, et le dernier quart de temps de A en écho qui s'éteint
+    land = m.buf[drop:drop + beat].copy()
+    src = band(edges(a_eff[-(beat // 4):], 2), lo=400)
+    for k in range(4):
+        s = k * beat // 4
+        land[s:s + len(src)] += src[: beat - s] * (0.5 * 0.55 ** k)
+    seg = np.concatenate([seg, land])
     peak = float(np.abs(seg).max())
-    if peak > 0.98:
+    if peak > 0.98:  # pas de bosse de volume
         seg *= 0.98 / peak
-    m.log(f"montée douce : B monte sur les {n / SR:.2f} dernières secondes, drop recalé à {(drop - start_b - pre) / SR * 1000:.0f} ms")
-    return end_a - 8 * bar, seg, drop
+    m.log(f"{name} douce : B monte sur les {n / SR:.2f} dernières secondes, drop recalé à {(drop - start_b - pre) / SR * 1000:.0f} ms")
+    return end_a - L, seg.astype(np.float32), drop + beat
+
+
+def _hp_rise(x, top=300):
+    """A perd ses graves peu à peu (passe-haut de 20 Hz à `top`)."""
+    return sweep(x, lo=lambda t: 20 * (top / 20) ** t)
+
+
+def _spin(m, start, bar):
+    """Une mesure de disque ramené en arrière à partir de `start` (vitesse en sinus, jusqu'à 3,5 fois)."""
+    t = np.arange(bar) / bar
+    pos = np.clip(start - np.cumsum(3.5 * np.sin(np.pi * t) ** 1.3), 0, None)
+    out = np.stack([np.interp(pos, np.arange(start - 4 * bar, start), m.buf[start - 4 * bar:start, c], left=0)
+                    for c in range(CH)], axis=1).astype(np.float32)
+    return edges(band(out, lo=60) * ramp(bar, 1.0, 0.0) ** 0.5, 2)
+
+
+def _brake(x):
+    """Vinyle qui ralentit jusqu'à l'arrêt sur la durée de x."""
+    n = len(x)
+    pos = np.cumsum(np.linspace(1.0, 0.0, n) ** 1.5)
+    pos = pos[pos < n - 1]
+    out = np.stack([np.interp(pos, np.arange(n), x[:, c]) for c in range(CH)], axis=1).astype(np.float32)
+    return edges(np.concatenate([out * ramp(len(out), 1, 0.6), np.zeros((n - len(out), CH), np.float32)]), 2)
+
+
+def montee_courte(m, end_a, start_b, bar, ratio, pre=0):
+    """4 mesures : une mesure de A en boucle qui se divise par deux (1, ½, ¼, ⅛ de mesure), de plus en plus
+    aiguë et sans graves, pendant que B monte dessous."""
+    a = m.buf[end_a - 4 * bar:end_a]
+    src, parts = a[:bar], []
+    for div, lo, r0, r1 in [(1, 100, 1.0, 1.0), (2, 300, 1.0, 1.02), (4, 600, 1.02, 1.08), (8, 1000, 1.08, 1.2)]:
+        piece = src[: bar // div]
+        for i in range(div):
+            parts.append(edges(band(pitched(piece, r0 + (r1 - r0) * i / max(1, div - 1)), lo=lo), 2))
+    eff = np.concatenate(parts)
+    eff = np.concatenate([eff, np.zeros((4 * bar - len(eff), CH), np.float32)])
+    return _douce(m, end_a, start_b, bar, pre, eff, "montée courte")
+
+
+def echo_doux(m, end_a, start_b, bar, ratio, pre=0):
+    """4 mesures : A perd ses graves sur 2 mesures, puis son dernier temps rebondit en écho (½ temps,
+    répétitions qui s'éteignent) pendant que A s'efface et que B monte dessous."""
+    beat = bar // 4
+    a = m.buf[end_a - 4 * bar:end_a].copy()
+    head = _hp_rise(a[:2 * bar], 250)
+    tail = band(a[2 * bar:], lo=250) * smooth(2 * bar, 1.0, 0.0)
+    hit = band(edges(a[2 * bar:2 * bar + beat], 3), lo=300)
+    for k in range(1, 16):
+        s = k * beat // 2
+        if s >= 2 * bar:
+            break
+        tail[s:s + beat] += hit[: 2 * bar - s] * (0.6 ** k)
+    return _douce(m, end_a, start_b, bar, pre, np.concatenate([head, tail]), "écho")
+
+
+def retour_doux(m, end_a, start_b, bar, ratio, pre=0):
+    """4 mesures : A perd ses graves sur 3 mesures, puis tourne à l'envers sur la dernière, B monte dessous."""
+    a = m.buf[end_a - 4 * bar:end_a - bar].copy()
+    return _douce(m, end_a, start_b, bar, pre, np.concatenate([_hp_rise(a, 300), _spin(m, end_a - bar, bar)]), "retour arrière")
+
+
+def frein_doux(m, end_a, start_b, bar, ratio, pre=0):
+    """4 mesures : A perd ses graves sur 3 mesures, puis ralentit jusqu'à l'arrêt sur la dernière."""
+    a = m.buf[end_a - 4 * bar:end_a].copy()
+    return _douce(m, end_a, start_b, bar, pre, np.concatenate([_hp_rise(a[:3 * bar], 300), _brake(a[3 * bar:])]), "frein")
+
+
+def filtre(m, end_a, start_b, bar, ratio, pre=0):
+    """8 mesures : A se ferme peu à peu (passe-bas de 18 kHz à 200 Hz : il ne reste que ses basses),
+    pendant que B monte dessous sur les 4 dernières."""
+    a = m.buf[end_a - 8 * bar:end_a].copy()
+    eff = sweep(a, hi=lambda t: 18000 * (200 / 18000) ** (t ** 1.5)) * smooth(8 * bar, 1.0, 0.75)
+    return _douce(m, end_a, start_b, bar, pre, eff, "balayage de filtre")
 
 
 def retour(m, end_a, start_b, bar, ratio):
@@ -163,4 +256,7 @@ def melange(m, end_a, start_b, bar, ratio, bars=8):
 
 
 RENDERERS = {"coupe": coupe, "montee": montee, "retour": retour, "frein": frein, "boucle": boucle,
-             "echo": echo, "melange": melange}
+             "echo": echo, "melange": melange, "montee_courte": montee_courte, "echo_doux": echo_doux,
+             "retour_doux": retour_doux, "frein_doux": frein_doux, "filtre": filtre}
+# Préréglages qui font monter B sous la fin de A : ils reçoivent l'avance de B (pre)
+DOUX = {"montee", "montee_courte", "echo_doux", "retour_doux", "frein_doux", "filtre"}

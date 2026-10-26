@@ -52,12 +52,16 @@ for name, fn in RENDERERS.items():
         print(f"{name:15s} ✗ {e!r}")
         ok = False
 
-m = Mem(120)  # montée douce : B lancé 2 mesures avant son drop
-bar = int(2 * SR)
-start, seg, resume = RENDERERS["montee"](m, m.end_a, m.start_b, bar, 1.0, pre=2 * bar)
-print(f"montée douce : segment {len(seg) / SR:.2f} s, B reprend {(resume - m.start_b) / SR:.2f} s après son lancement "
-      f"(attendu ≈ 4,00), crête {np.abs(seg).max():.2f}")
-ok &= abs((resume - m.start_b) / SR - 4.0) < 0.05 and np.isfinite(seg).all()
+from rendu import DOUX  # noqa: E402
+
+bar = int(2 * SR)  # transitions douces : B lancé 4 mesures avant son drop, reprise 1 temps après (atterrissage)
+for name in sorted(DOUX):
+    m = Mem(120)
+    start, seg, resume = RENDERERS[name](m, m.end_a, m.start_b, bar, 1.0, pre=4 * bar)
+    good = abs((resume - m.start_b) / SR - 8.5) < 0.05 and np.isfinite(seg).all() and np.abs(seg).max() <= 1.0
+    print(f"{PRESETS[name]['label']:20s} douce : segment {len(seg) / SR:5.2f} s (début {(start - m.end_a) / SR:+.2f} s), "
+          f"B reprend {(resume - m.start_b) / SR:.2f} s après son lancement (attendu 8,50){'' if good else '  ✗'}")
+    ok &= good
 
 m = Mem(140)  # 14 % d'écart : le mélange doit refuser
 try:

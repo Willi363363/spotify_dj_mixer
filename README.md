@@ -29,3 +29,7 @@ Index complet : [`docs/README.md`](docs/README.md).
 ## Scripts
 
 Les scripts qui ont servi aux tests sont dans [`outils/`](outils/README.md), la maquette E2 dans [`proto/e2/`](proto/e2/README.md), réutilisables tels quels.
+
+## Dans Spotify
+
+L'app Spicetify **« Mode DJ »** ([`spicetify/`](spicetify/README.md)) affiche dans Spotify le morceau entendu sur un cercle façon Eternal Jukebox, le morceau qui arrive, un visualiseur, la frise de la transition et la file d'attente, avec les boutons pour lancer une transition. Installation : `spicetify/installer.sh`.

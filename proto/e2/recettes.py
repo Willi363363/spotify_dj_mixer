@@ -28,14 +28,24 @@ PRESETS = {
         "volume": "B entre vite, A sort lentement", "filtre": "passe-bas qui se ferme sur A"}},
     "frein":   {"label": "Frein", "bars": 1, "ingredients": {"effets": "vinyle qui ralentit", "volume": "B net sur le premier temps"}},
     "boucle":  {"label": "Boucle", "bars": 4, "ingredients": {"boucle": "dernière mesure de A ×4", "volume": "B net sur le premier temps"}},
+    # Variantes douces (B monte sous A sur 4 mesures, atterrissage avec un écho de A)
+    "montee_courte": {"label": "Montée courte", "bars": 4, "ingredients": {
+        "boucle": "une mesure de A qui se divise par deux", "effets": "hauteur qui monte", "volume": "B monte dessous"}},
+    "echo_doux": {"label": "Écho", "bars": 4, "ingredients": {
+        "filtre": "A perd ses graves", "effets": "dernier temps de A en écho ½ temps", "volume": "A s'efface, B monte dessous"}},
+    "retour_doux": {"label": "Retour arrière", "bars": 4, "ingredients": {
+        "filtre": "A perd ses graves", "boucle": "dernière mesure de A à l'envers", "volume": "B monte dessous"}},
+    "frein_doux": {"label": "Frein", "bars": 4, "ingredients": {
+        "filtre": "A perd ses graves", "effets": "A ralentit jusqu'à l'arrêt", "volume": "B monte dessous"}},
+    "filtre": {"label": "Balayage de filtre", "bars": 8, "ingredients": {
+        "filtre": "A se ferme, il ne reste que ses basses", "volume": "B monte dessous sur 4 mesures"}},
 }
 ALIASES = {"build": "montee", "spinback": "retour", "mix": "melange", "brake": "frein", "loop": "boucle"}
 
 # Pour l'écran : étapes (libellé, début, fin, en fraction de la transition) et moment où B devient
 # audible (0 = dès le début, B superposé à A ; 1 = à la fin, B tombe net).
 PHASES = {
-    "montee":  {"b_from": 0.75, "phases": [("A perd ses basses", 0, 0.5), ("Roulements qui accélèrent", 0.5, 0.75),
-                                            ("B monte sous les roulements", 0.75, 1)]},
+    "montee":  {"b_from": 0.5, "phases": [("A perd ses basses", 0, 0.5), ("Roulements, B monte dessous", 0.5, 1)]},
     "melange": {"b_from": 0, "phases": [("B entre, sans ses basses", 0, 0.25), ("A et B ensemble", 0.25, 0.5),
                                          ("Basses passées à B, A s'éteint", 0.5, 1)]},
     "retour":  {"b_from": 1, "phases": [("A tourne à l'envers", 0, 1)]},
@@ -43,6 +53,12 @@ PHASES = {
     "frein":   {"b_from": 1, "phases": [("A ralentit jusqu'à l'arrêt", 0, 1)]},
     "boucle":  {"b_from": 1, "phases": [("Dernière mesure de A en boucle", 0, 1)]},
     "coupe":   {"b_from": 1, "phases": []},
+    "montee_courte": {"b_from": 0, "phases": [("Boucle d'une mesure", 0, 0.25), ("½ mesure", 0.25, 0.5),
+                                              ("¼ de mesure", 0.5, 0.75), ("⅛, B arrive", 0.75, 1)]},
+    "echo_doux": {"b_from": 0, "phases": [("A perd ses graves, B monte", 0, 0.5), ("Écho de A, A s'efface", 0.5, 1)]},
+    "retour_doux": {"b_from": 0, "phases": [("A perd ses graves, B monte", 0, 0.75), ("A à l'envers", 0.75, 1)]},
+    "frein_doux": {"b_from": 0, "phases": [("A perd ses graves, B monte", 0, 0.75), ("A ralentit", 0.75, 1)]},
+    "filtre": {"b_from": 0.5, "phases": [("A se ferme", 0, 0.5), ("A se ferme, B monte", 0.5, 1)]},
 }
 
 
