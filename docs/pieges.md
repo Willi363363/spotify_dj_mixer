@@ -35,6 +35,9 @@ Format : **symptôme → cause → parade**.
 | Un balayage de filtre claque | Les nœuds `bq_*` changent leurs coefficients d'un coup | Moins de paliers, effets lissés, ou fondu croisé entre deux chaînes (cf. [`tests/07-serie-b-effets.md`](tests/07-serie-b-effets.md)) |
 | Le trou au changement de morceau est mal repéré (200 ms au lieu de 40) | Un passage calme du morceau confondu avec le silence | Ne chercher que du silence numérique (quasi-zéros) |
 
+| On n'entend pas A, la transition sonne « fausse », l'enregistrement de l'entrée est **silencieux** | Un appareil Bluetooth connecté devient la sortie par défaut, et PipeWire y bascule Spotify, qui contourne la maquette | `e2.py` vérifie toutes les 2 s que Spotify entre dans `dj_in` et que sa propre sortie suit l'appareil par défaut ; toujours contrôler l'enregistrement avant de croire un verdict |
+| Spicetify à moitié chargé après un redémarrage de Spotify (`Spicetify.URI` absent, `Player.data.item` vide) | Spotify ne joue rien : une partie de Spicetify attend un morceau chargé | Lancer un morceau (`PlayerAPI.play`), et au besoin recharger la page (`location.reload()`) |
+
 ## Spicetify (interface)
 
 | Symptôme | Cause | Parade |

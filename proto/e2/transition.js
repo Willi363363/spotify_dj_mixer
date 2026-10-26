@@ -59,20 +59,28 @@
   const energyUp = zone(b, dropBar.start, dropBar.start + 4 * dropBar.duration).loud
     > zone(a, exitForDrop.i.start - 4 * exitForDrop.i.duration, exitForDrop.i.start).loud + 1.5;
   const keySure = a.track.key_confidence > 0.4 && b.track.key_confidence > 0.4;
-  const order = gap > 0.06 ? ['echo', 'retour', 'coupe']
-    : energyUp ? ['montee', 'retour', 'coupe']
-    : gap < 0.03 && keySure ? ['melange', 'montee', 'coupe']
-    : ['coupe', 'echo', 'retour'];
+  // Seules les transitions validées à l'écoute sont choisies d'office : le mélange quand les morceaux se
+  // calent, la montée sinon (elle ne demande aucun calage : B tombe net sur son drop). La coupe seule a été
+  // rejetée à l'écoute (docs/tests/09-ecoute-maquette.md) ; les autres attendent d'être jugées.
+  const blend = gap < 0.03 && keySure;
+  const order = blend ? ['melange', 'montee'] : ['montee'];
   let mode = globalThis.__MODE ?? 'auto', raison = 'choisi à la main';
   if (mode === 'auto') {
     mode = order.find((m) => m !== globalThis.__LAST) ?? order[0];
-    raison = gap > 0.06 ? `tempos éloignés (${(gap * 100).toFixed(0)} %)` : energyUp ? "l'énergie monte vers le drop de B"
-      : gap < 0.03 && keySure ? 'tempos et tonalités proches' : 'tonalité incertaine ou tempos moyens';
+    raison = blend ? 'tempos et tonalités proches'
+      : gap > 0.06 ? `tempos éloignés (${(gap * 100).toFixed(0)} %) : montée, sans calage`
+      : energyUp ? "l'énergie monte vers le drop de B" : 'tonalité incertaine : montée, sans calage';
     if (mode !== order[0]) raison += ', variante pour ne pas répéter';
   }
   const best = mode === 'melange' ? rows[0] : exitForDrop;
+  // Transitions qui tombent sur le drop : Spotify lance B 2 mesures avant, pour que la maquette puisse
+  // faire monter ces 2 mesures sous la fin de A au lieu de faire surgir B d'un coup.
+  const PRE_BARS = mode === 'melange' ? 0 : 2;
+  const bStart = Math.max(0, best.j.start - PRE_BARS * best.j.duration);
+  const pre_s = best.j.start - bStart;
 
-  const choix = { mode, raison, bar_s: best.i.duration, ratio, tempoA: +a.track.tempo.toFixed(1), tempoB: +b.track.tempo.toFixed(1),
+  const choix = { mode, raison, bar_s: best.i.duration, ratio, pre_s: +pre_s.toFixed(3),
+    tempoA: +a.track.tempo.toFixed(1), tempoB: +b.track.tempo.toFixed(1),
     sortieA: +best.i.start.toFixed(2), entreeB: +best.j.start.toFixed(2), dropB: +drop.start.toFixed(2),
     paires: rows.length, cout: +best.cost.toFixed(2) };
   if (globalThis.__DRY) return choix;  // à blanc : calcule sans rien jouer
@@ -86,6 +94,6 @@
   await sleep(1000);
   while (aExit - P.getProgress() > LEAD) await sleep(Math.max(4, (aExit - P.getProgress() - LEAD) / 2));
   const t_wall = Date.now();
-  await Spicetify.Platform.PlayerAPI.play({ uri: B }, {}, { seekTo: Math.round(best.j.start * 1000) });
+  await Spicetify.Platform.PlayerAPI.play({ uri: B }, {}, { seekTo: Math.round(bStart * 1000) });
   return { t_wall, ...choix };
 })()

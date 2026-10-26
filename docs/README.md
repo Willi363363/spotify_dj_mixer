@@ -9,7 +9,8 @@ Chaque fichier traite un seul sujet et reste sous 200 lignes. Une information vi
 | [`vision.md`](vision.md) | Objectif, ce que l'utilisateur veut obtenir, contraintes |
 | [`faisabilite.md`](faisabilite.md) | Catalogue complet : possible, impossible, statut, étape |
 | [`architecture.md`](architecture.md) | Les trois briques (extension, programme local, PipeWire) et leurs échanges |
-| [`roadmap.md`](roadmap.md) | Étapes E1 et E2, questions ouvertes |
+| [`roadmap.md`](roadmap.md) | Étapes E1 et E2, décisions, questions ouvertes |
+| [`gouts.md`](gouts.md) | Ce que le développeur aime et n'aime pas à l'écoute, mis à jour à chaque essai |
 
 ## Preuves
 

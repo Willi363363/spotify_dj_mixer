@@ -56,7 +56,10 @@ Premier jalon à définir au démarrage : un module qui retarde le son de N seco
 | Le **fondu de volume seul** n'est pas une transition DJ | Rejeté deux fois à l'écoute, même calé sur le rythme |
 | Le **mélange** se fait temps par temps (tempo qui glisse), recalé à ±½ temps, avec échange des basses et filtre | Validé à l'écoute (« clean de fou ») ; méthode de l'article Spotify 2017 |
 | Les transitions sont des **recettes** d'ingrédients (volume, égaliseur, filtre, effets, boucle), choisies automatiquement | Modèle de Spotify Mix, cf. [`recherche/spotify-transitions.md`](recherche/spotify-transitions.md) |
-| Une superposition **se replie sur une coupe** quand les temps ne se calent pas | Comme Spotify et Apple ; vérifié en vrai (accord 0,11 → coupe) |
+| Dans une montée, **B monte sous les 2 dernières mesures** (Spotify le lance 2 mesures avant son drop) et enchaîne sur son drop sans raccord | Validé à l'écoute (essai 11) ; B qui surgit d'un coup a été jugé « sec, pas smooth » |
+| Chaque avis d'écoute est reporté dans [`gouts.md`](gouts.md) et dans [`tests/09-ecoute-maquette.md`](tests/09-ecoute-maquette.md) | Demande du développeur |
+| La **coupe seule** n'est jamais choisie d'office | Rejetée à l'écoute (« absolument horrible ») alors que la recherche la donne comme signature du rap |
+| Choix automatique limité aux transitions **validées à l'écoute** : mélange si les morceaux se calent, **montée** sinon ; une superposition impossible **se replie sur la montée** | La montée ne demande aucun calage ; les autres préréglages attendent d'être jugés |
 | Tout point de transition se **recale sur le son** (attaques de grosse caisse) | Les positions de Spotify ont laissé A et B décalés (accord 0,02) |
 | Choix de la transition selon le genre, le tempo, la tonalité, l'énergie, et sans répéter la précédente | Pratique des DJ, cf. [`recherche/dj/automatisation.md`](recherche/dj/automatisation.md) |
 | Tests d'écoute : un essai à la fois, annoncé, sur des morceaux pas encore entendus | Sans repères, le développeur ne sait pas ce qu'il entend |

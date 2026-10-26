@@ -26,9 +26,13 @@ def coupe(m, end_a, start_b, bar, ratio):
     return end_a - n, m.buf[end_a - n:end_a] * ramp(n, 1, 0), start_b + first
 
 
-def montee(m, end_a, start_b, bar, ratio):
+def montee(m, end_a, start_b, bar, ratio, pre=0):
     """Montée validée à l'écoute : 4 mesures de A dont les graves partent, puis roulements de plus en plus
-    serrés et aigus jusqu'au drop de B, sans blanc."""
+    serrés et aigus jusqu'au drop de B, sans blanc. Si B a été lancé `pre` échantillons avant son drop,
+    ces mesures montent sous les derniers roulements (sans basses, filtre qui s'ouvre) et B enchaîne
+    sur son drop sans raccord : son arrivée n'est plus sèche."""
+    if pre:
+        return _montee_douce(m, end_a, start_b, bar, pre)
     beat = bar // 4
     a = m.buf[end_a - 8 * bar:end_a].copy()
     parts = [edges(band(a[k * beat:(k + 1) * beat], lo=20 + 280 * (k / 15) ** 2), 2) for k in range(16)]
@@ -43,6 +47,24 @@ def montee(m, end_a, start_b, bar, ratio):
     seg = np.concatenate(parts)
     seg = np.concatenate([seg, np.zeros((8 * bar - len(seg), CH), dtype=np.float32)])  # 8 mesures pile
     return end_a - 8 * bar, seg, start_b + entry_kick(m, start_b, beat)
+
+
+def _montee_douce(m, end_a, start_b, bar, pre):
+    beat = bar // 4
+    _, seg, _ = montee(m, end_a, start_b + pre, bar, 1.0)  # la montée seule, B recalé plus bas
+    drop = start_b + pre + entry_kick(m, start_b + pre, beat)
+    n = min(drop - start_b, 2 * bar, len(seg))  # au plus les 2 dernières mesures de la montée
+    m.wait(drop + beat)
+    b_pre = m.buf[drop - n:drop].copy()
+    # B monte sous les roulements : filtre qui s'ouvre de 1500 à 120 Hz, volume de 0 à 0,85
+    b_pre = sweep(b_pre, lo=lambda t: 1500 * (120 / 1500) ** t) * smooth(n, 0.0, 0.85)
+    seg = seg.copy()
+    seg[-n:] = seg[-n:] * smooth(n, 1.0, 0.55) + b_pre  # les roulements s'effacent un peu pour faire place
+    peak = float(np.abs(seg).max())
+    if peak > 0.98:
+        seg *= 0.98 / peak
+    m.log(f"montée douce : B monte sur les {n / SR:.2f} dernières secondes, drop recalé à {(drop - start_b - pre) / SR * 1000:.0f} ms")
+    return end_a - 8 * bar, seg, drop
 
 
 def retour(m, end_a, start_b, bar, ratio):

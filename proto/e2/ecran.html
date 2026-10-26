@@ -5,88 +5,196 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mode DJ, écran</title>
 <style>
-  :root { --bg: #0f1115; --card: #181b22; --text: #e8eaf0; --sub: #8b93a7; --accent: #1ed760; --warn: #ffb020; --line: #2a2f3a; }
+  :root { --bg: #0f1115; --card: #181b22; --text: #e8eaf0; --sub: #8b93a7; --line: #2a2f3a;
+          --a: #4f8cff; --b: #ff5ea8; --accent: #1ed760; --warn: #ffb020; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; padding: 16px; }
-  .grid { display: grid; gap: 12px; max-width: 760px; margin: 0 auto; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .wrap { max-width: 860px; margin: 0 auto; display: grid; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
   .label { color: var(--sub); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
-  .title { font-size: 22px; font-weight: 700; margin-top: 4px; }
-  .artist { color: var(--sub); }
-  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  .big { font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 10px; }
-  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .2s linear; }
-  .live { border-color: var(--accent); }
-  .soon { border-color: var(--warn); }
-  .beats { display: flex; gap: 6px; margin-top: 10px; }
-  .beats span { flex: 1; height: 10px; border-radius: 3px; background: var(--line); }
-  .beats span.on { background: var(--accent); }
+  .now { font-size: 28px; font-weight: 800; margin-top: 4px; }
+  .now .a { color: var(--a); } .now .b { color: var(--b); }
+  .count { font-size: 18px; color: var(--warn); font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
   .muted { color: var(--sub); }
+  /* frise */
+  .tl { position: relative; height: 170px; margin-top: 10px; }
+  .lane { position: absolute; left: 0; right: 0; height: 40px; }
+  .lane .name { position: absolute; left: 0; top: -18px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .bar { position: absolute; top: 0; height: 40px; border-radius: 8px; }
+  .laneA { top: 22px; } .laneA .name { color: var(--a); } .laneA .bar { background: var(--a); }
+  .laneB { top: 106px; } .laneB .name { color: var(--b); } .laneB .bar { background: var(--b); }
+  .fade { opacity: .35; }
+  .zone { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--sub); border-right: 1px dashed var(--sub);
+          background: rgba(255,255,255,.04); }
+  .phase { position: absolute; top: 68px; height: 30px; display: flex; align-items: center; justify-content: center;
+           font-size: 12px; text-align: center; border-radius: 6px; background: var(--line); padding: 0 4px; overflow: hidden; }
+  .phase.on { background: var(--warn); color: #111; font-weight: 700; }
+  .head { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .head span { position: absolute; top: -20px; left: -30px; width: 60px; text-align: center; font-size: 11px; color: var(--accent); font-weight: 700; }
+  .ticks { position: absolute; left: 0; right: 0; bottom: -4px; height: 14px; font-size: 11px; color: var(--sub); }
+  .ticks span { position: absolute; transform: translateX(-50%); }
+  .idle { color: var(--sub); padding: 30px 0; text-align: center; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 8px; }
+  .controls label { display: grid; gap: 4px; font-size: 12px; color: var(--sub); flex: 1 1 220px; }
+  select, button { font: inherit; color: var(--text); background: var(--line); border: 1px solid #3a4150; border-radius: 8px; padding: 8px 10px; }
+  button { cursor: pointer; font-weight: 700; }
+  button.go { background: var(--accent); color: #0b1a10; border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #msg { margin-top: 8px; min-height: 1.4em; }
   .ingr { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .ingr span { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--line); color: var(--text); }
+  .ingr span { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--line); }
   .ingr b { color: var(--sub); font-weight: 600; margin-right: 4px; }
 </style>
 </head>
 <body>
-<div class="grid">
-  <div class="card" id="heardCard">
-    <div class="label">Tu entends</div>
-    <div class="title" id="heard">…</div>
-    <div class="row"><span class="artist" id="heardArtist"></span><span class="muted" id="heardPos"></span></div>
-  </div>
-  <div class="card" id="nextCard">
-    <div class="label" id="nextLabel">Prochaine transition</div>
-    <div class="row"><div class="title" id="nextMode">aucune prévue</div><div class="big" id="nextIn"></div></div>
-    <div class="muted" id="nextTracks"></div>
-    <div class="muted" id="nextWhy"></div>
-    <div class="ingr" id="nextIngr"></div>
-    <div class="beats" id="beats"></div>
-    <div class="bar"><div id="nextBar"></div></div>
+<div class="wrap">
+  <div class="card">
+    <div class="label">Lancer une transition</div>
+    <div class="controls">
+      <label>Morceaux<select id="pair"></select></label>
+      <label>Transition<select id="mode">
+        <option value="auto">Auto (la maquette choisit)</option>
+        <option value="montee">Montée (validée)</option>
+        <option value="melange">Mélange (validé)</option>
+        <option value="retour">Retour arrière (non jugé)</option>
+        <option value="echo">Sortie en écho (non jugée)</option>
+        <option value="frein">Frein (non jugé)</option>
+        <option value="boucle">Boucle (non jugée)</option>
+        <option value="coupe">Coupe (rejetée)</option>
+      </select></label>
+      <button class="go" id="go">Lancer</button>
+      <button id="again">Rejouer la dernière</button>
+    </div>
+    <div class="muted" id="msg"></div>
   </div>
   <div class="card">
-    <div class="label">Spotify joue réellement (en avance)</div>
-    <div class="row"><div><b id="spot">…</b> <span class="artist" id="spotArtist"></span></div><span class="muted" id="spotPos"></span></div>
+    <div class="label">Dans tes haut-parleurs, maintenant</div>
+    <div class="now" id="now">…</div>
+    <div class="count" id="count"></div>
+  </div>
+  <div class="card">
+    <div class="label" id="tlTitle">Transition</div>
+    <div class="tl" id="tl"><div class="idle">Aucune transition prévue pour l'instant.</div></div>
+    <div class="muted" id="why" style="margin-top:14px"></div>
+    <div class="ingr" id="ingr"></div>
+  </div>
+  <div class="card">
+    <div class="label">Spotify joue réellement (en avance sur ce que tu entends)</div>
+    <div><b id="spot">…</b> <span class="muted" id="spotArtist"></span></div>
     <div class="muted" id="delay"></div>
   </div>
 </div>
 <script>
 const $ = (id) => document.getElementById(id);
-const mmss = (s) => (s == null || isNaN(s)) ? '' : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-const MODES = { build: 'Montée', spinback: 'Retour arrière', mix: 'Mélange', loop: 'Boucle', brake: 'Frein' };
-$('beats').innerHTML = '<span></span>'.repeat(8);
-async function tick() {
-  let s;
-  try { s = await (await fetch('/state', { cache: 'no-store' })).json(); } catch { return; }
-  $('heard').textContent = s.heard?.name ?? '…';
-  $('heardArtist').textContent = s.heard?.artist ?? '';
-  $('heardPos').textContent = s.heard?.pos_s != null ? `${mmss(s.heard.pos_s)} / ${mmss(s.heard.dur_s)}` : '';
+const esc = (s) => String(s ?? '?').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const fmt = (s) => `${Math.max(0, s).toFixed(1)} s`;
+
+function view(s) {
+  // t = temps écoulé depuis le début de la transition (négatif avant, au-delà de dur après)
+  if (s.current) return { t: s.current.elapsed_s, x: s.current };
+  if (s.next) return { t: -s.next.in_s, x: s.next };
+  if (s.last) return { t: s.last.elapsed_s, x: s.last };
+  return null;
+}
+
+function render(s) {
   $('spot').textContent = s.spotify?.name ?? '…';
   $('spotArtist').textContent = s.spotify?.artist ?? '';
-  $('spotPos').textContent = s.spotify ? `${mmss(s.spotify.pos_s)} / ${mmss(s.spotify.dur_s)}` : '';
-  $('delay').textContent = `Retard du son sur Spotify : ${s.delay_s.toFixed(1)} s`;
-  const card = $('nextCard'), t = s.current ?? s.next;
-  card.classList.toggle('live', !!s.current);
-  card.classList.toggle('soon', !s.current && s.next && s.next.in_s < 8);
-  if (!t) { $('nextLabel').textContent = 'Prochaine transition'; $('nextMode').textContent = 'aucune prévue'; $('nextIn').textContent = ''; $('nextTracks').textContent = ''; $('nextWhy').textContent = ''; $('nextIngr').innerHTML = ''; $('nextBar').style.width = '0'; return; }
-  $('nextLabel').textContent = s.current ? 'Transition en cours' : 'Prochaine transition';
-  $('nextMode').textContent = t.label ?? MODES[t.mode] ?? t.mode;
-  $('nextTracks').textContent = `${t.from ?? '?'}  →  ${t.to ?? '?'}`;
-  $('nextWhy').textContent = t.raison ? `Pourquoi : ${t.raison}` : '';
-  $('nextIngr').replaceChildren(...Object.entries(t.ingredients ?? {}).map(([k, v]) => {
-    const el = document.createElement('span'); const b = document.createElement('b');
-    b.textContent = k; el.append(b, v); return el;
-  }));
-  const bars = Math.max(1, Math.round(t.dur_s / t.bar_s));
-  if (s.current) {
-    $('nextIn').textContent = `mesure ${Math.min(bars, Math.floor(t.elapsed_s / t.bar_s) + 1)}/${bars}`;
-    $('nextBar').style.width = `${Math.min(100, 100 * t.elapsed_s / t.dur_s)}%`;
-  } else {
-    $('nextIn').textContent = `${Math.max(0, t.in_s).toFixed(1)} s`;
-    $('nextBar').style.width = '0';
+  $('delay').textContent = `Le son que tu entends a ${s.delay_s.toFixed(0)} s de retard sur Spotify.`;
+  const v = view(s);
+  if (!v) {
+    $('now').innerHTML = `<span class="a">${esc(s.heard?.name ?? '…')}</span>`;
+    $('count').textContent = ''; $('tlTitle').textContent = 'Transition'; $('why').textContent = ''; $('ingr').innerHTML = '';
+    $('tl').innerHTML = '<div class="idle">Aucune transition prévue pour l\'instant.</div>';
+    return;
   }
-  const beatsIn = s.current ? Math.floor(t.elapsed_s / (t.bar_s / 4)) % 8 : -1;
-  [...$('beats').children].forEach((el, i) => el.classList.toggle('on', i === beatsIn));
+  const { t, x } = v, dur = Math.max(x.dur_s, 0.01), bFrom = (x.b_from ?? 1) * dur;
+  const A = esc(x.from), B = esc(x.to);
+  const phase = (x.phases ?? []).find(([, a, b]) => t >= a * dur && t < b * dur);
+
+  // Grande phrase : ce qu'on entend, et ce qui va arriver
+  if (t < 0) {
+    $('now').innerHTML = `<span class="a">${A}</span> seul`;
+    $('count').textContent = `${x.label} dans ${fmt(-t)}`;
+  } else if (t < dur) {
+    $('now').innerHTML = phase ? esc(phase[0]) : `${esc(x.label)} en cours`;
+    $('count').textContent = `${x.label} : encore ${fmt(dur - t)}, puis ${x.to ?? 'B'} seul`;
+  } else {
+    $('now').innerHTML = `<span class="b">${B}</span> seul`;
+    $('count').textContent = `${x.label} terminée il y a ${fmt(t - dur)}`;
+  }
+  $('tlTitle').textContent = `${x.label} : ${x.from ?? 'A'} → ${x.to ?? 'B'}`;
+  $('why').textContent = x.raison ? `Pourquoi ce choix : ${x.raison}` : '';
+  $('ingr').replaceChildren(...Object.entries(x.ingredients ?? {}).map(([k, val]) => {
+    const el = document.createElement('span'), b = document.createElement('b');
+    b.textContent = k; el.append(b, val); return el;
+  }));
+
+  // Frise : de 8 s avant la transition à 8 s après
+  const t0 = -8, t1 = dur + 8, pct = (u) => `${((u - t0) / (t1 - t0)) * 100}%`;
+  const width = (a, b) => `${((b - a) / (t1 - t0)) * 100}%`;
+  const phases = (x.phases ?? []).map(([name, a, b]) =>
+    `<div class="phase ${phase && phase[0] === name ? 'on' : ''}" style="left:${pct(a * dur)};width:${width(a * dur, b * dur)}">${esc(name)}</div>`).join('');
+  const ticks = [t0, 0, dur, t1].map((u) => `<span style="left:${pct(u)}">${u === 0 ? 'début' : u === dur ? 'fin' : ''}</span>`).join('');
+  $('tl').innerHTML = `
+    <div class="zone" style="left:${pct(0)};width:${width(0, dur)}"></div>
+    <div class="lane laneA"><div class="name" style="left:0">A · ${A} (finit)</div>
+      <div class="bar" style="left:0;width:${width(t0, 0)}"></div>
+      <div class="bar fade" style="left:${pct(0)};width:${width(0, dur)}"></div></div>
+    ${phases}
+    <div class="lane laneB"><div class="name" style="left:${pct(bFrom)}">B · ${B} (arrive)</div>
+      <div class="bar ${bFrom < dur ? 'fade' : ''}" style="left:${pct(bFrom)};width:${width(bFrom, dur)}"></div>
+      <div class="bar" style="left:${pct(dur)};width:${width(dur, t1)}"></div></div>
+    <div class="head" style="left:${pct(Math.min(t1, Math.max(t0, t)))}"><span>maintenant</span></div>
+    <div class="ticks">${ticks}</div>`;
+}
+
+// Paires de morceaux déjà repérées comme faciles à mixer (tempo et tonalité proches)
+const PAIRS = [
+  ['Money Pull Up → SO COMAN', '7Lr0PGZVb4EzyIhCIETFlG', '6W0iLz8aOKUzObanCzJj2U'],
+  ['Tic → La Choré Des Shattas', '1rO9az1C7u2RXUK0E9YfUi', '1lpYczTQkuPn075NYrGyea'],
+  ['Shatta Mad → Shatta (DJ Chinwax)', '08bOtraHk8waBUt6sQOZce', '3u023dY0esoiIcGwX1y6uu'],
+  ['KONGOLESE SOUS BBL → Jumping Jack', '5dBRz6giSIBDkXOhOD80KF', '5uGVj3IDPsRFRyd5QwIpft'],
+  ['Am to Pm → De Rum', '1xaz7OFM1Jnw8eVUdeFgcy', '2f5LK3pm7L3TsdMC205lbo'],
+  ['Am to Pm → PAM PAM', '1xaz7OFM1Jnw8eVUdeFgcy', '6P2thaTa9BUy36xZGDI9C0'],
+  ['Alpha → Laptop', '2dVDbbS9W6n6YY80R4aJdZ', '7e2vCAtcYXuM8JOUqIZ9GQ'],
+  ['CHOKOLA → Sit on My Face', '3LMZFpt61Yon4PE0YCpdOM', '0uXePy8d0vmDmhrZgUhGrc'],
+  ['Doglife! Vcvc → Supla', '3pAaU5sM5DNLdrB2QUeCDR', '73tjoD1CNZn8EoCnUqnj3Z'],
+  ['Sa Piti → Wolidèh', '3BtRlEia7n1OAuzf9wNufr', '2NcN3pHVhYO2PeZy7bPSUS'],
+  ['B.M.S → Miss Kitoko', '0T1CzbjyOEU60cL5G244di', '03xgcXTzxDbsN9v4m6sYsk'],
+  ['Bouwéy → Wa wa Waaaw', '3sxcR3k3ZkNmvmXQB28Qnr', '1Y5RPLTpnqoSQPU0NkiWzi'],
+  ['Kitty Kitty → Elephant Man Bouyon', '78KqWSFU5tP9HWEprly7XS', '2Nc4LD9eToKbh8V3a8KxkE'],
+];
+$('pair').innerHTML = PAIRS.map(([n], i) => `<option value="${i}">${esc(n)}</option>`).join('');
+
+let state = null;
+async function run(req) {
+  $('msg').textContent = 'Envoi…';
+  try {
+    const r = await fetch('/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });
+    const j = await r.json();
+    $('msg').textContent = r.ok
+      ? `C'est parti : Spotify rejoue le début, la transition passera dans environ 1 minute (suis le compte à rebours ci-dessous).`
+      : `Impossible : ${j.message}.`;
+  } catch { $('msg').textContent = 'La maquette ne répond pas.'; }
+}
+$('go').onclick = () => {
+  const [name, a, b] = PAIRS[+$('pair').value];
+  run({ mode: $('mode').value, a: `spotify:track:${a}`, b: `spotify:track:${b}`, name });
+};
+$('again').onclick = () => state?.last_request && run(state.last_request);
+
+function controls(s) {
+  const blocked = !s.can_run || s.busy || !!s.next || !!s.current;
+  $('go').disabled = blocked;
+  $('again').disabled = blocked || !s.last_request;
+  $('again').textContent = s.last_request ? `Rejouer : ${s.last_request.name ?? 'dernière'}` : 'Rejouer la dernière';
+  if (!s.can_run) $('msg').textContent = 'Boutons indisponibles : la maquette a été lancée sans les réglages DJ_WS et DJ_WORK.';
+  else if (s.busy && !s.next) $('msg').textContent = 'Préparation : Spotify joue le morceau A jusqu\'à son point de sortie…';
+}
+
+async function tick() {
+  try { state = await (await fetch('/state', { cache: 'no-store' })).json(); render(state); controls(state); } catch { /* maquette arrêtée */ }
 }
 setInterval(tick, 150);
 tick();

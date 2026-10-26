@@ -42,7 +42,7 @@ Catalogue de tout ce qui a été envisagé. **E1** = prototype sans module audio
 | Balayage sans clic | ⚠️ Clics mesurés avec les nœuds fournis | E1 avec effets lissés, ou E2 | idem |
 | Effets pilotés depuis l'extension | ✅ Connexion testée (0,7 ms) | E1 | [05](tests/05-connexion-locale.md) |
 | Son retardé en mémoire, sans perte | ✅ Mesuré (20,01 s, ressemblance 0,9998) | E2 | [08](tests/08-serie-c-maquette-e2.md) |
-| **Montée par roulements jusqu'au drop** | ✅ **Validée à l'oreille** | E2 | [09](tests/09-ecoute-maquette.md) |
+| **Montée par roulements jusqu'au drop**, B qui monte sous la fin | ✅ **Validée à l'oreille** | E2 | [09](tests/09-ecoute-maquette.md) |
 | Superposer deux morceaux sans Premium | ✅ **Mélange validé à l'oreille** (tempo qui glisse, échange des basses) ; ❌ en simple fondu | E2 | [08](tests/08-serie-c-maquette-e2.md), [09](tests/09-ecoute-maquette.md) |
 | Choix automatique du préréglage et des points de transition | ✅ Testé à blanc sur 6 paires et en vrai | E2 | [09](tests/09-ecoute-maquette.md) |
 | Échange des basses entre les deux morceaux | ✅ Maquette | E2 | idem |

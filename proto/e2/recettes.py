@@ -16,8 +16,8 @@ SR, CH = 44100, 2
 # Préréglages : ce que l'écran affiche, et la fonction qui les rend.
 PRESETS = {
     "montee":  {"label": "Montée", "bars": 8, "ingredients": {
-        "filtre": "passe-haut qui monte sur A", "boucle": "roulements 1 → 1/16 de temps", "effets": "hauteur qui monte",
-        "volume": "B net sur son drop"}},
+        "filtre": "passe-haut qui monte sur A, filtre qui s'ouvre sur B", "boucle": "roulements 1 → 1/16 de temps",
+        "effets": "hauteur qui monte", "volume": "B monte sous les 2 dernières mesures, puis son drop"}},
     "retour":  {"label": "Retour arrière", "bars": 1, "ingredients": {
         "boucle": "disque ramené à l'envers", "filtre": "graves de A retirés", "volume": "B net sur le premier temps"}},
     "coupe":   {"label": "Coupe", "bars": 0, "ingredients": {"volume": "A coupé, B net sur le premier temps"}},
@@ -30,6 +30,20 @@ PRESETS = {
     "boucle":  {"label": "Boucle", "bars": 4, "ingredients": {"boucle": "dernière mesure de A ×4", "volume": "B net sur le premier temps"}},
 }
 ALIASES = {"build": "montee", "spinback": "retour", "mix": "melange", "brake": "frein", "loop": "boucle"}
+
+# Pour l'écran : étapes (libellé, début, fin, en fraction de la transition) et moment où B devient
+# audible (0 = dès le début, B superposé à A ; 1 = à la fin, B tombe net).
+PHASES = {
+    "montee":  {"b_from": 0.75, "phases": [("A perd ses basses", 0, 0.5), ("Roulements qui accélèrent", 0.5, 0.75),
+                                            ("B monte sous les roulements", 0.75, 1)]},
+    "melange": {"b_from": 0, "phases": [("B entre, sans ses basses", 0, 0.25), ("A et B ensemble", 0.25, 0.5),
+                                         ("Basses passées à B, A s'éteint", 0.5, 1)]},
+    "retour":  {"b_from": 1, "phases": [("A tourne à l'envers", 0, 1)]},
+    "echo":    {"b_from": 0, "phases": [("B démarre, A en écho", 0, 1)]},
+    "frein":   {"b_from": 1, "phases": [("A ralentit jusqu'à l'arrêt", 0, 1)]},
+    "boucle":  {"b_from": 1, "phases": [("Dernière mesure de A en boucle", 0, 1)]},
+    "coupe":   {"b_from": 1, "phases": []},
+}
 
 
 class Refus(Exception):
