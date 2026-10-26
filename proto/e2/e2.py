@@ -26,7 +26,9 @@ sys.path.insert(0, HERE)  # python -I n'ajoute pas le dossier du script au chemi
 from recettes import ALIASES, CH, PHASES, PRESETS, SR, Refus  # noqa: E402
 from rendu import RENDERERS  # noqa: E402
 
-D = float(sys.argv[1]) if len(sys.argv) > 1 else 20.0
+# Avance en mémoire : un mélange de 8 mesures doit recevoir tout B puis être rendu avant que la lecture
+# n'atteigne son début, soit au moins 2 × sa durée + 2 mesures + le calcul (~50 s à 100 BPM).
+D = float(sys.argv[1]) if len(sys.argv) > 1 else 50.0
 # Pour les boutons de l'écran : adresse de débogage de Spotify et dossier de travail de run.sh
 WS = os.environ.get("DJ_WS", "")
 WORK = os.environ.get("DJ_WORK", "")
@@ -249,6 +251,10 @@ def control():
         log("ordre reçu", o)
         try:
             start, seg, resume, preset, raison = prepare(o)
+            if start < rp + int(0.5 * SR):
+                # Prête trop tard : la jouer maintenant ramènerait A en arrière. On laisse la musique continuer.
+                log(f"« {preset} » prête trop tard ({(rp - start) / SR:+.1f} s) : transition abandonnée")
+                continue
             frm = track_at(start)
             p = PRESETS[preset]
             info = {"from": frm and frm["name"], "bar_s": o["bar_s"], "dur_s": max(len(seg) / SR, 0.01),

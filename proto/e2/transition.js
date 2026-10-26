@@ -73,9 +73,9 @@
     if (mode !== order[0]) raison += ', variante pour ne pas répéter';
   }
   const best = mode === 'melange' ? rows[0] : exitForDrop;
-  // Transitions qui tombent sur le drop : Spotify lance B 2 mesures avant, pour que la maquette puisse
-  // faire monter ces 2 mesures sous la fin de A au lieu de faire surgir B d'un coup.
-  const PRE_BARS = mode === 'melange' ? 0 : 2;
+  // Spotify lance B 2 mesures avant son point d'entrée : la montée fait monter ces 2 mesures sous la fin
+  // de A au lieu de faire surgir B d'un coup. Vaut aussi pour le mélange, dont le repli est une montée.
+  const PRE_BARS = 2;
   const bStart = Math.max(0, best.j.start - PRE_BARS * best.j.duration);
   const pre_s = best.j.start - bStart;
 

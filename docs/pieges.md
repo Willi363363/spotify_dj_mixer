@@ -38,6 +38,8 @@ Format : **symptôme → cause → parade**.
 | On n'entend pas A, la transition sonne « fausse », l'enregistrement de l'entrée est **silencieux** | Un appareil Bluetooth connecté devient la sortie par défaut, et PipeWire y bascule Spotify, qui contourne la maquette | `e2.py` vérifie toutes les 2 s que Spotify entre dans `dj_in` et que sa propre sortie suit l'appareil par défaut ; toujours contrôler l'enregistrement avant de croire un verdict |
 | Spicetify à moitié chargé après un redémarrage de Spotify (`Spicetify.URI` absent, `Player.data.item` vide) | Spotify ne joue rien : une partie de Spicetify attend un morceau chargé | Lancer un morceau (`PlayerAPI.play`), et au besoin recharger la page (`location.reload()`) |
 
+| Une transition saute en arrière dans A, ou n'est pas jouée | Préparée après le moment où elle devait commencer : l'avance en mémoire était trop courte pour attendre B puis calculer | Avance ≥ 2 × la durée de la transition + 2 mesures + le calcul (50 s à 100 BPM) ; décider d'un refus sur 2 mesures ; abandonner une transition prête trop tard |
+
 ## Spicetify (interface)
 
 | Symptôme | Cause | Parade |

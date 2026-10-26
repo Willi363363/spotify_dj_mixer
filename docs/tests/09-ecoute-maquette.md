@@ -16,6 +16,8 @@
 | 8 | 26/10 | Même paire en montée | idem | « pas remarqué » : joué alors que l'écran n'aidait pas à suivre ; nouvel écran (frise) |
 | 9 | 26/10 | Montée lancée depuis le bouton de l'écran | idem | ⚠️ **essai invalide** : Spotify contournait la maquette (écouteurs Bluetooth connectés), cf. [`../pieges.md`](../pieges.md) |
 | 10 | 26/10 | Montée, routage corrigé | idem | ✅ basses qui disparaissent et roulements qui accélèrent aimés, disparition de A « clean de fou » ; ❌ B « apparaît d'un coup sans prévenir, sec, pas smooth » |
+| 12 | 26/10 | Auto : mélange tenté puis **refusé** (accord −0,25), repli sur une montée **sans montée douce** et prête 23 s trop tard (avance de 30 s insuffisante) | « Tic » → « La Choré Des Shattas » (104 BPM) | fin de A « clean » ; ❌ arrivée de B « sèche ». Corrigé : avance de 45 s, B toujours lancé 2 mesures avant, transition trop tardive abandonnée |
+| 13 | 26/10 | Auto : mélange **refusé dès 2 mesures** (accord 0,06), **repli en montée douce** prêt avec 13 s de marge ; avance de 50 s | « Tic » → « La Choré Des Shattas » (104 BPM) | ✅ « ça me va, je valide, c'était doux » |
 | 11 | 26/10 | **Montée douce** : B lancé 2 mesures avant son drop, qui montent sous les roulements (filtre qui s'ouvre, volume 0 → 0,85), puis drop sans raccord | « Money Pull Up » → « SO COMAN » (100 BPM) | ✅ « ça va, je valide » |
 
 Avant l'essai 6, le même mélange sur « Doglife! Vcvc » → « Supla » a été **refusé** par la maquette (accord des grosses caisses 0,11) : le repli fonctionne.
@@ -30,6 +32,8 @@ Avant l'essai 6, le même mélange sur « Doglife! Vcvc » → « Supla » a ét
 | Essai 9 : son entrant dans la maquette | **silence total** (Spotify parti vers le Bluetooth) |
 | Essais 10 et 11 : son entrant / sortie | −19 et −18 dB ; sortie = entrée retardée de 30,02 s (ressemblance 0,968 et 0,897) |
 | Montée douce (essai 11) | B monte sur les 4,79 dernières secondes ; drop recalé de 80 ms |
+| Essai 12 : préparation du mélange avant refus | 32 s (attente de 10 mesures de B) pour 30 s d'avance : repli joué trop tard |
+| Essai 13 : refus décidé sur 2 mesures | 18 s après le changement ; repli prêt 13 s avant de jouer ; sortie = entrée retardée de 50,04 s (0,983) |
 
 ## Ce qu'on en tire
 

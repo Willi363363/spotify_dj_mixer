@@ -124,17 +124,21 @@ def melange(m, end_a, start_b, bar, ratio, bars=8):
     dst = np.concatenate([[0], np.cumsum(dout)]).round()
     L = int(dst[-1])
     b0 = start_b + entry_kick(m, start_b, int(d2))
-    m.wait(b0 + int(N * d2) + SR)
     a_src = m.buf[end_a - int(N * d1):end_a]
     # Calage fin : décalage de B (±½ temps) qui accorde le mieux ses grosses caisses avec A sur les
     # 2 premières mesures, où les tempos n'ont pas encore dérivé. Indispensable quand la grosse caisse
-    # n'est pas sur chaque temps (bouyon, shatta).
+    # n'est pas sur chaque temps (bouyon, shatta). Ces 2 mesures suffisent pour décider d'un refus : on
+    # n'attend pas tout B, sinon le repli arrive trop tard pour être joué.
     win, h = int(8 * d1), int(0.005 * SR)
+    m.wait(b0 + win + int(d2))
     shifts = range(-int(d2 / 2), int(d2 / 2), h)
     score = {s: kick_agreement(a_src[:win], m.buf[b0 + s:b0 + s + win]) for s in shifts if b0 + s >= start_b}
     s_best = max(score, key=score.get)
     m.log(f"mélange : B décalé de {s_best / SR * 1000:+.0f} ms, accord sur 2 mesures {score.get(0, 0):.2f} -> {score[s_best]:.2f}")
+    if score[s_best] < 0.15:
+        raise Refus(f"temps mal calés sur les 2 premières mesures (accord {score[s_best]:.2f})")
     b0 += s_best
+    m.wait(b0 + int(N * d2) + SR)
     b_src = m.buf[b0:b0 + int(N * d2)]
     a = stretch_map(a_src, np.arange(N + 1) * d1, dst)[:L]
     b = stretch_map(b_src, np.arange(N + 1) * d2, dst)[:L]
