@@ -9,7 +9,7 @@ Le projet tient sur deux leviers, tous deux vérifiés par des tests :
 
 ## État
 
-Phase de **cadrage** terminée : toutes les pistes ont été testées, y compris une **maquette de l'étape E2** (son retardé en mémoire, mix avec échange des basses, calage du tempo, boucle, freinage) dans [`proto/e2/`](proto/e2/README.md). Prochaine étape : le prototype E1 (cf. [`docs/roadmap.md`](docs/roadmap.md)).
+Cadrage terminé, **maquette E2** en place (son retardé en mémoire, calage sur la grille de Spotify) dans [`proto/e2/`](proto/e2/README.md). Le système de transitions a été **refait de zéro** (v2 : catalogue C1-C8, replis R1/R2, choix automatique) : tests hors ligne au vert, **pas encore écouté**. Prochaine étape : le protocole d'écoute (cf. [`docs/roadmap.md`](docs/roadmap.md)).
 
 ## Lire la doc
 
@@ -19,8 +19,9 @@ Phase de **cadrage** terminée : toutes les pistes ont été testées, y compris
 | Ce qui est possible, impossible, et par où | [`docs/faisabilite.md`](docs/faisabilite.md) |
 | Comment les briques s'assemblent | [`docs/architecture.md`](docs/architecture.md) |
 | Les étapes de construction | [`docs/roadmap.md`](docs/roadmap.md) |
+| Les transitions v2 et les décisions | [`docs/specs/`](docs/specs/transitions-v2.md), [`docs/adr/`](docs/adr/README.md) |
 | Les tests réalisés et leurs résultats | [`docs/tests/`](docs/tests/README.md) |
-| L'existant (Smart DJ, Eternal Jukebox, apps du marché) | [`docs/recherche/`](docs/recherche/README.md) |
+| L'existant (plateformes, logiciels de DJ, méthodes des DJ) | [`docs/recherche/`](docs/recherche/README.md) |
 | La machine de référence et sa config | [`docs/environnement.md`](docs/environnement.md) |
 | Les pièges rencontrés | [`docs/pieges.md`](docs/pieges.md) |
 
@@ -32,4 +33,4 @@ Les scripts qui ont servi aux tests sont dans [`outils/`](outils/README.md), la 
 
 ## Dans Spotify
 
-L'app Spicetify **« Mode DJ »** ([`spicetify/`](spicetify/README.md)) affiche dans Spotify le morceau entendu sur un cercle façon Eternal Jukebox, le morceau qui arrive, un visualiseur, la frise de la transition et la file d'attente, avec les boutons pour lancer une transition. Installation : `spicetify/installer.sh`.
+L'app Spicetify **« Mode DJ »** ([`spicetify/`](spicetify/README.md)) affiche dans Spotify le morceau entendu sur un cercle façon Eternal Jukebox, le morceau qui arrive, un visualiseur, la frise de la transition, la file d'attente et la note des transitions (écoute à l'aveugle), avec les boutons pour lancer une transition. Installation : `spicetify/installer.sh`.

@@ -1,6 +1,6 @@
 # Tests
 
-Tests réalisés le **2026-10-23** sur la machine de [`../environnement.md`](../environnement.md). Comment les rejouer : [`methode.md`](methode.md).
+Tests réalisés du **2026-10-23** au **2026-10-26** sur la machine de [`../environnement.md`](../environnement.md). Comment les rejouer : [`methode.md`](methode.md).
 
 | # | Test | Question | Verdict |
 |---|---|---|---|
@@ -12,9 +12,12 @@ Tests réalisés le **2026-10-23** sur la machine de [`../environnement.md`](../
 | 06 | [Série A : Spotify seul](06-serie-a-spotify.md) | Décisions, transition, volume, interface, file, pubs, ressemblance | ✅ sauf pubs non observées ; trou de changement 12 à 400 ms |
 | 07 | [Série B : effets](07-serie-b-effets.md) | Égaliseur, écho, clics des balayages | ✅ égaliseur et écho, ⚠️ clics |
 | 08 | [Série C : maquette E2](08-serie-c-maquette-e2.md) | Son retardé, mix avec échange des basses, calage du tempo, boucle, freinage | ✅ principe validé |
-| 09 | [Écoute de la maquette](09-ecoute-maquette.md) | Les transitions sonnent-elles « DJ » ? | ✅ **montée continue validée** ; ❌ mix par fondu rejeté |
 | 10 | [Preuve du calage](10-calage.md) | Les temps de A et B tombent-ils ensemble pendant une superposition ? | ❌ ancien calage : ~½ temps d'erreur ; ✅ grille de Spotify + correction : **0 à 10 ms** sur 5 paires rap FR |
 
 ## Règle
 
 Un résultat audio se juge **à l'oreille et sur un enregistrement**. Les positions annoncées par Spotify ont menti de 80 ms au test 03 : seules les mesures sur la sortie son font foi.
+
+## Journal des notes d'écoute
+
+`notes-ecoute.jsonl` (ou `DJ_NOTES`) : une ligne par note envoyée depuis l'écran (`POST /rating`), avec le rapport complet de la transition. Il **repart vide** pour la v2 et n'existe qu'après la première note ; `e2.py` le crée. Les résultats du protocole d'écoute ([`../specs/protocole-ecoute.md`](../specs/protocole-ecoute.md)) iront dans `12-ecoute-transitions-v2.md` (le 11 est réservé à `11-voix.md`, calibrage de la voix). Le numéro 09 (ancienne écoute) est retiré et n'est pas réutilisé.

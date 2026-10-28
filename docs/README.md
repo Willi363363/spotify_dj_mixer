@@ -9,21 +9,22 @@ Chaque fichier traite un seul sujet et reste sous 200 lignes. Une information vi
 | [`vision.md`](vision.md) | Objectif, ce que l'utilisateur veut obtenir, contraintes |
 | [`faisabilite.md`](faisabilite.md) | Catalogue complet : possible, impossible, statut, étape |
 | [`architecture.md`](architecture.md) | Les trois briques (extension, programme local, PipeWire) et leurs échanges |
-| [`roadmap.md`](roadmap.md) | Étapes E1 et E2, décisions, questions ouvertes |
-| [`gouts.md`](gouts.md) | Ce que le développeur aime et n'aime pas à l'écoute, mis à jour à chaque essai |
+| [`roadmap.md`](roadmap.md) | Étapes E1 et E2, prochaine étape, questions ouvertes |
 
 ## Preuves
 
 | Dossier | Contenu |
 |---|---|
 | [`tests/`](tests/README.md) | Un fichier par test : protocole, mesures, conclusion |
-| [`recherche/`](recherche/README.md) | Ce qui existe déjà et ce qu'on en retient |
+| [`recherche/`](recherche/README.md) | Audit du 2026-10-28 : plateformes, logiciels et recherche, méthodes des DJ |
 
-## Revue
+## Transitions v2
 
 | Dossier | Contenu |
 |---|---|
-| [`revue/`](revue/README.md) | Revue du 2026-10-26 : diagnostic, bugs, plan d'amélioration |
+| [`specs/`](specs/transitions-v2.md) | Spec des transitions v2 (catalogue, placement, choix, repli, critères) et [protocole d'écoute](specs/protocole-ecoute.md) |
+| [`adr/`](adr/README.md) | Décisions d'architecture : contrat d'ordre, voix, modules, ce qu'on garde de l'ancien code |
+| [`ux/`](ux/transitions-v2.md) | Écran : écoute à l'aveugle, note, états |
 
 ## Pratique
 
