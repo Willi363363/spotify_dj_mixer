@@ -1,19 +1,20 @@
-"""Maquette E2 : Spotify -> sortie virtuelle dj_in -> ce programme (D secondes d'avance) -> haut-parleurs.
+"""Moteur E2 : Spotify -> sortie virtuelle dj_in -> ce programme (D secondes d'avance) -> haut-parleurs.
 
-Ordres reçus en UDP sur 127.0.0.1:47801 (run.sh) ou en POST /order (extension dj-auto), JSON :
-  {"cmd": "transition", "mode": <préréglage de recettes.py>, "t_wall": <ms de l'ordre de saut donné à Spotify>,
-   "bar_s": <mesure de A>, "bar_b_s": <mesure de B>, "ratio": <tempo A / tempo B>, "pre_s": <avance de B>,
-   "gapless": <saut dans la playlist, sans silence>, "manuel": <changement de morceau non prévu>, "raison": ...}
-  {"cmd": "track", ...}  infos de morceau envoyées par espion.mjs (écran, pause).
-Le programme situe le changement dans la mémoire (silence numérique s'il y en a, sinon l'heure de l'ordre),
-recale la fin de A sur ses temps, fait rendre la recette par rendu.py, puis la joue à la place du flux.
-Écran : http://127.0.0.1:47802
+Ordres v2 (ADR 0001) reçus en POST /order (extension dj-auto) ou en UDP sur 127.0.0.1:47801 (run.sh, avec
+"cmd": "transition") ; validés par transitions/contrat.valider_ordre. Messages {"cmd": "track", …} d'espion.mjs en UDP.
+Le programme situe le saut dans la mémoire (find_switch), recale A et B sur les grilles de Spotify (Place), essaie
+la transition demandée puis ses replis (catalogue.rendre), mesure le rendu (mesures.rapport), le joue à la place du
+flux et en rend compte dans /state (derniere_transition, transitions_recentes) et DJ_JOURNAL.
+Écran : http://127.0.0.1:47802 ; GET /dj-catalogue.js sert spicetify/dj-catalogue.js.
+Variables : DJ_WORK (boutons de l'écran), DJ_NOTES (notes d'écoute), DJ_JOURNAL (rapports JSONL, vide = coupé),
+DJ_SLOW (ralenti de regain, 1,00 à 1,06, défaut 1,03 ; ADR 0003), DJ_WS (secours de l'adresse de débogage).
 Usage : python3 -I proto/e2/e2.py [délai_s]   (journal sur la sortie standard)
 """
 import bisect
 import collections
 import http.server
 import importlib
+import importlib.util
 import json
 import os
 import re
@@ -28,34 +29,46 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)  # python -I n'ajoute pas le dossier du script au chemin d'import
 
-import recettes  # noqa: E402
-import rendu  # noqa: E402
-from recettes import CH, SR  # noqa: E402
+import transitions  # noqa: E402
 
-# Avance visée : un mélange de 8 mesures doit recevoir tout B puis être rendu avant que la lecture n'atteigne
-# son début (~16 mesures + calcul). Un mélange la fait fondre de ~8 mesures ; les styles doux la regagnent
-# (jusqu'à 2 mesures chacun) en prolongeant A un peu plus longtemps.
-D = float(sys.argv[1]) if len(sys.argv) > 1 else 60.0
-# Pour les boutons : dossier de travail de run.sh ; l'adresse de débogage de Spotify est retrouvée à
-# chaque lancement (elle change à chaque redémarrage de Spotify), DJ_WS ne sert que de secours.
+# Ordre de rechargement (ADR 0005) : chaque module ne dépend que des précédents
+MODULES = ("outils", "contrat", "calage", "primitives", "voix", "mesures", "seches", "boucle", "superposees",
+           "catalogue")
+X = {n: importlib.import_module(f"transitions.{n}") for n in MODULES}
+SR, CH = X["outils"].SR, X["outils"].CH
+OrdreInvalide = X["contrat"].OrdreInvalide
+
+
+def _slow(v):
+    """Ralenti de regain d'après DJ_SLOW, borné à 1,00..1,06 (ADR 0003) ; valeur illisible : défaut 1,03."""
+    try:
+        return float(min(1.06, max(1.0, float(v))))
+    except (TypeError, ValueError):
+        return 1.03
+
+
+D = 60.0             # avance visée (s), argument de la ligne de commande
 WS = os.environ.get("DJ_WS", "")
 WORK = os.environ.get("DJ_WORK", "")
 NOTES = os.environ.get("DJ_NOTES", os.path.join(HERE, "..", "..", "docs", "tests", "notes-ecoute.jsonl"))
+JOURNAL = os.environ.get("DJ_JOURNAL", "")
+CATALOGUE_JS = os.path.join(HERE, "..", "..", "spicetify", "dj-catalogue.js")
 ORIGIN = "http://127.0.0.1:47802"
-# Pages autorisées à interroger la maquette et à lancer une transition : l'écran local et l'app Spicetify
+# Pages autorisées à interroger le moteur et à lancer une transition : l'écran local et l'app Spicetify
 ORIGINS = {ORIGIN, "https://xpui.app.spotify.com"}
 URI = re.compile(r"^spotify:track:[A-Za-z0-9]{22}$")
 LAT = 0.2            # latence de pacat (s) : délai entre l'écriture d'un bloc et le moment où on l'entend
 GAIN_S = 16          # durée du retour du gain de B à 1 après une transition
 SWITCH_S = 0.09      # délai entre l'ordre de saut et le changement dans le flux (mesuré, saut dans la playlist)
-SLOW = 1.06          # ralenti de regain d'avance entre les transitions (cf. slower)
+SLOW = _slow(os.environ.get("DJ_SLOW", "1.03"))
 BLOCK = 1024
+MAX_CORPS = 65536    # corps JSON d'un POST (ordre v2 avec 2 × 120 temps : ~5 Ko), au-delà : 400
 N = SR * 600         # 10 min de mémoire, en anneau
 buf = np.zeros((N, CH), dtype=np.float32)
 written = 0          # échantillons reçus depuis le lancement (la position dans buf est written % N)
 clock = []           # (ms mur, échantillons reçus) pour relier l'heure à la mémoire
-lock = threading.Lock()  # protège plan, current, last, last_resume, stream_gain
-plan = []            # segments à jouer à la place du flux : (début, tableau, reprise, préréglage, infos, gain)
+lock = threading.Lock()  # protège plan, current, last, last_resume, stream_gain, recentes
+plan = []            # segments à jouer à la place du flux : (début, tableau, reprise, transition, infos, gain)
 last_resume = 0      # reprise du dernier segment prévu : un segment suivant ne peut commencer avant
 tracks = []          # (échantillon d'entrée, infos du morceau envoyées par espion.mjs)
 track_samples = []   # les mêmes échantillons seuls, pour la recherche dichotomique
@@ -68,42 +81,52 @@ seg_resume = 0       # pendant un segment : sa reprise dans la mémoire…
 seg_left = 0         # … et ce qu'il en reste à jouer (0 hors segment)
 slow_next = None     # prochaine tranche ralentie : (début, fin dans la mémoire, son étiré)
 clock_lock = threading.Lock()  # le lecteur purge `clock` pendant que d'autres fils y cherchent une heure
-spotify_paused = False  # d'après espion.mjs : la maquette se met en pause en même temps que Spotify
+spotify_paused = False  # d'après espion.mjs : le moteur se met en pause en même temps que Spotify
 pause_votes = 0      # messages « en pause » de suite : un seul ne suffit pas (pause passagère pendant un saut)
 last_track_t = 0.0   # heure du dernier message d'espion : sans nouvelles, la pause expire
 levels = [0.0] * 16  # niveau de 16 bandes de fréquences de ce qui part vers les haut-parleurs (visualiseur)
 events = collections.deque(maxlen=12)  # derniers événements notables (refus, abandons), pour l'app
+recentes = collections.deque(maxlen=10)  # rapports des 10 dernières transitions, la plus récente d'abord
 run_proc = None      # run.sh en cours, lancé depuis l'écran
 last_request = None  # dernière transition demandée depuis l'écran, pour « Rejouer »
 
 
-_mtimes = {m.__name__: os.path.getmtime(m.__file__) for m in (recettes, rendu)}
+def _fichiers():
+    return {n: os.path.getmtime(os.path.join(HERE, "transitions", f"{n}.py")) for n in MODULES}
+
+
+_mtimes = _fichiers()
 _reload_lock = threading.Lock()
 
 
 def fresh():
-    """Recharge recettes.py et rendu.py s'ils ont changé : régler un rendu ne demande pas de relancer la
-    maquette (et d'attendre à nouveau D secondes de remplissage)."""
-    global recettes, rendu
+    """Recharge le paquet transitions/ si un de ses fichiers a changé : régler un rendu ne demande pas de relancer
+    le moteur (et d'attendre à nouveau D secondes de remplissage). Tous les modules sont rechargés hors place, dans
+    l'ordre MODULES, puis basculés d'un coup ; en cas d'erreur, l'ancienne version est gardée entière."""
+    global X, OrdreInvalide
     with _reload_lock:
-        now = {m.__name__: os.path.getmtime(m.__file__) for m in (recettes, rendu)}
+        now = _fichiers()
         if now == _mtimes:
             return
         _mtimes.update(now)  # un fichier en erreur n'est retenté qu'à sa prochaine modification
+        old = dict(X)
+        new = {}
         try:
-            # rechargés hors place puis basculés d'un coup : un rendu en cours garde ses modules entiers
-            import importlib.util
-            new = {}
-            for name in ("recettes", "rendu"):
-                spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, f"{name}.py"))
+            for n in MODULES:
+                name = f"transitions.{n}"
+                spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, "transitions", f"{n}.py"))
                 mod = importlib.util.module_from_spec(spec)
-                sys.modules[name] = mod  # rendu importe le nouveau recettes
+                sys.modules[name] = mod  # les modules suivants importent la nouvelle version
+                setattr(transitions, n, mod)
                 spec.loader.exec_module(mod)
-                new[name] = mod
-            recettes, rendu = new["recettes"], new["rendu"]
-            log("recettes.py et rendu.py rechargés")
+                new[n] = mod
+            X = new
+            OrdreInvalide = new["contrat"].OrdreInvalide
+            log("paquet transitions/ rechargé")
         except Exception as e:  # fichier à moitié sauvé, erreur de syntaxe : on garde la version qui marche
-            sys.modules["recettes"], sys.modules["rendu"] = recettes, rendu
+            for n, mod in old.items():
+                sys.modules[f"transitions.{n}"] = mod
+                setattr(transitions, n, mod)
             event("echec", f"rechargement du rendu impossible, ancienne version gardée : {e!r}")
 
 
@@ -151,7 +174,7 @@ def read(a, b):
 
 
 class Memoire:
-    """Ce que rendu.py voit de la mémoire."""
+    """Ce que les rendus (transitions/) voient de la mémoire : read, wait, log."""
     read = staticmethod(read)
     log = staticmethod(log)
 
@@ -218,84 +241,139 @@ def update_levels(block):
 def state():
     with lock:
         p, cur_t, last_t = (plan[0] if plan else None), current, last
+        recent = list(recentes)
     heard = track_at(rp - int(LAT * SR))
     if cur_t:
         heard = {**(heard or {}), "name": cur_t["from"], "artist": "transition en cours", "pos_s": None, "dur_s": None}
     nxt = None
     if p:
         to = track_at(p[2] + 3 * SR)  # le nom de B arrive après son son : on le relit 3 s après la reprise
-        nxt = {**p[4], "to": to and to["name"], "to_uri": to and to.get("uri"), "mode": p[3], "in_s": (p[0] - rp) / SR}
+        nxt = {**p[4], "to": to and to["name"], "to_uri": to and to.get("uri"), "transition": p[3],
+               "in_s": (p[0] - rp) / SR}
     cur = {**cur_t, "elapsed_s": time.time() - cur_t["t0"]} if cur_t else None
     done = {**last_t, "elapsed_s": time.time() - last_t["t0"]} if last_t and time.time() - last_t["t_end"] < 20 else None
     busy = run_proc is not None and run_proc.poll() is None
     return {"heard": heard, "spotify": track_at(written), "delay_s": current_delay() / SR, "target_s": D,
             "next": nxt, "current": cur, "last": done, "busy": busy, "last_request": last_request,
             "can_run": bool(WORK), "levels": [round(v, 3) for v in levels], "events": list(events),
-            "notes": notes_avg}
+            "notes": notes_avg, "ralenti": SLOW, "derniere_transition": recent[0] if recent else None,
+            "transitions_recentes": recent}
 
 
 def launch(req):
-    """Lance run.sh pour la paire et le préréglage demandés depuis l'écran ; une seule à la fois."""
+    """Lance run.sh pour la paire et la transition demandées depuis l'écran (POST /run v2) ; une seule à la fois."""
     global run_proc, last_request
+    if "mode" in req:
+        return 400, "champ « mode » (contrat v1) refusé : utiliser « transition »"
+    tr, a, b = req.get("transition", "auto"), req.get("a", ""), req.get("b", "")
+    # les uri et la transition finissent dans du JS exécuté dans Spotify (run.sh) : format strict
+    if not isinstance(tr, str) or tr not in {"auto", *X["contrat"].IDS} or not (
+            isinstance(a, str) and isinstance(b, str) and URI.match(a) and URI.match(b)):
+        return 400, "demande invalide"
     ws = spotify_ws()
     if not (ws and WORK):
-        return 503, "Spotify n'est pas en mode débogage, ou maquette lancée sans DJ_WORK"
+        return 503, "Spotify n'est pas en mode débogage, ou moteur lancé sans DJ_WORK"
     if run_proc is not None and run_proc.poll() is None:
         return 409, "une transition est déjà en préparation"
     if plan or current:
         return 409, "une transition est déjà prévue ou en cours"
-    mode, a, b = str(req.get("mode", "auto")), str(req.get("a", "")), str(req.get("b", ""))
-    # les uri finissent dans du JS exécuté dans Spotify (run.sh) : format strict
-    if mode not in {"auto", *recettes.PRESETS, *recettes.ALIASES} or not (URI.match(a) and URI.match(b)):
-        return 400, "demande invalide"
-    if mode == "auto":  # « Rejouer » doit refaire le même choix : on oublie le préréglage précédent
+    if tr == "auto":  # « Rejouer » doit refaire le même choix : on oublie la transition précédente
         try:
-            os.remove(os.path.join(WORK, "dernier-mode"))
+            os.remove(os.path.join(WORK, "derniere-transition"))
         except FileNotFoundError:
             pass
-    last_request = {"mode": mode, "a": a, "b": b, "name": str(req.get("name", ""))[:200]}
-    run_proc = subprocess.Popen(["bash", os.path.join(HERE, "run.sh"), ws, mode, WORK, a, b],
+    last_request = {"transition": tr, "a": a, "b": b, "name": str(req.get("name", ""))[:200]}
+    run_proc = subprocess.Popen(["bash", os.path.join(HERE, "run.sh"), ws, tr, WORK, a, b],
                                 stdout=open(os.path.join(WORK, "run.out"), "w"), stderr=subprocess.STDOUT)
-    log(f"écran : transition demandée ({mode}, {last_request['name']})")
+    log(f"écran : transition demandée ({tr}, {last_request['name']})")
     return 202, "lancée"
 
 
 def note_averages():
-    """Note moyenne par préréglage d'après le journal NOTES ; une transition notée deux fois compte pour sa
-    dernière note. L'extension s'en sert pour favoriser les styles qui plaisent."""
+    """Note moyenne par transition jouée d'après le journal NOTES (affichage seulement, H8) ; une transition notée
+    deux fois compte pour sa dernière note. Les lignes v1 (sans rapport) sont ignorées."""
     last_notes = {}
     try:
         with open(NOTES) as f:
             for line in f:
                 try:
                     e = json.loads(line)
-                    last_notes[(e.get("mode"), e.get("from"), e.get("to"))] = int(e["note"])
+                    tr = e["rapport"]["transition_jouee"]
+                    if tr:
+                        last_notes[e["id"]] = (tr, int(e["note"]))
                 except (ValueError, KeyError, TypeError):
                     continue
     except FileNotFoundError:
         return {}
-    by_mode = collections.defaultdict(list)
-    for (mode, _, _), n in last_notes.items():
-        by_mode[mode].append(n)
-    return {m: round(sum(v) / len(v), 2) for m, v in by_mode.items()}
+    by_tr = collections.defaultdict(list)
+    for tr, n in last_notes.values():
+        by_tr[tr].append(n)
+    return {t: round(sum(v) / len(v), 2) for t, v in by_tr.items()}
 
 
 notes_avg = note_averages()
 
 
 def rate(req):
-    """Note d'écoute d'une transition (1 à 5), ajoutée au journal NOTES."""
+    """Note d'écoute v2 (ADR 0001) : la transition est retrouvée par `id` parmi les 10 récentes (écoute à l'aveugle)
+    ; ligne ajoutée à NOTES avec le rapport complet."""
     global notes_avg
-    note = req.get("note")
-    if not isinstance(note, int) or not 1 <= note <= 5:
-        return 400, "note invalide"
-    entry = {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "note": note,
-             **{k: str(req.get(k, ""))[:200] for k in ("mode", "from", "to", "raison", "commentaire")}}
-    with open(NOTES, "a") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    note, etiq, com = req.get("note"), req.get("etiquettes", []), req.get("commentaire", "")
+    if isinstance(note, bool) or not isinstance(note, int) or not 1 <= note <= 5:
+        return 400, "note invalide (1 à 5)"
+    if not isinstance(etiq, list) or any(e not in X["contrat"].ETIQUETTES for e in etiq):
+        return 400, "étiquette inconnue"
+    if not isinstance(com, str) or len(com) > 1000:
+        return 400, "commentaire invalide"
+    with lock:
+        rap = next((r for r in recentes if r["id"] == req.get("id")), None)
+    if rap is None:
+        return 409, "transition inconnue (id absent des 10 dernières)"
+    entry = {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "id": rap["id"], "note": note, "etiquettes": sorted(set(etiq)),
+             "commentaire": com, "rapport": rap}
+    try:
+        with open(NOTES, "a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as e:
+        event("echec", f"note non enregistrée : {e!r}")
+        return 500, "note non enregistrée"
     notes_avg = note_averages()
-    log(f"note {note}/5 : {entry['mode']} ({entry['from']} -> {entry['to']})")
+    log(f"note {note}/5 : {rap['transition_jouee']} ({rap['id']})")
     return 201, "notée"
+
+
+def accept_order(req, demarrer=True):
+    """POST /order et UDP : (code HTTP, corps). 202 : ordre valide, préparé dans un fil ; 400 : invalide (dont
+    ancien `mode`) ; 409 : test manuel en cours, ordre trop tard ou qui chevauche la transition précédente."""
+    req = dict(req)
+    req.pop("cmd", None)  # run.sh distingue ses ordres des messages d'espion par "cmd": "transition"
+    try:
+        o = X["contrat"].valider_ordre(req)
+    except ValueError as e:  # OrdreInvalide
+        return 400, {"message": str(e)}
+    if o.manuel and run_proc is not None and run_proc.poll() is None:
+        return 409, {"message": "test manuel en cours : pas de rattrapage"}  # le saut vient de run.sh
+    why = conflit(o)
+    if why:
+        return 409, {"message": why}
+    if demarrer:
+        threading.Thread(target=handle_order, args=(o,), daemon=True).start()
+    return 202, {"ok": True, "id": o.id}
+
+
+def conflit(o):
+    """Raison de refuser l'ordre tout de suite (409), ou None : la lecture a déjà dépassé le début du segment, ou
+    une transition prévue reprend après lui."""
+    if not started or not clock or o.t_wall > clock[-1][0]:
+        return None
+    idx = sample_at(o.t_wall)
+    debut = idx - int((o.bars + 1) * o.a.bar_s * SR)
+    if debut < rp + int(0.5 * SR):
+        return f"ordre trop tard : la lecture a dépassé le saut ({(rp - debut) / SR:+.1f} s)"
+    with lock:
+        if debut < last_resume:
+            return "une transition chevauche déjà ce moment"
+    return None
 
 
 class Screen(http.server.BaseHTTPRequestHandler):
@@ -322,17 +400,27 @@ class Screen(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/state"):
             self._send(200, json.dumps(state()).encode(), "application/json")
+        elif self.path.split("?")[0] == "/dj-catalogue.js":
+            try:
+                with open(CATALOGUE_JS, "rb") as f:
+                    self._send(200, f.read(), "text/javascript; charset=utf-8")
+            except OSError:
+                self._send(404, b"// dj-catalogue.js introuvable", "text/javascript; charset=utf-8")
         else:
-            self._send(200, open(os.path.join(HERE, "ecran.html"), "rb").read(), "text/html; charset=utf-8")
+            with open(os.path.join(HERE, "ecran.html"), "rb") as f:
+                self._send(200, f.read(), "text/html; charset=utf-8")
 
     def do_POST(self):
-        # Seules l'écran et l'app Spicetify peuvent lancer une transition : une autre page web ouverte
-        # dans le navigateur pourrait sinon envoyer cette demande à la maquette.
-        if self.path not in ("/run", "/order", "/rating", "/double") or self.headers.get("Origin") not in ORIGINS:
+        # Seuls l'écran et l'app Spicetify peuvent lancer une transition : une autre page web ouverte dans le
+        # navigateur pourrait sinon envoyer cette demande au moteur.
+        body = None
+        if self.path not in ("/run", "/order", "/rating") or self.headers.get("Origin") not in ORIGINS:
             code, msg = 403, "refusé"
         else:
             try:
-                n = min(int(self.headers.get("Content-Length", 0)), 32768)  # les grilles de temps de A et B
+                n = int(self.headers.get("Content-Length", 0))
+                if not 0 <= n <= MAX_CORPS:  # négatif : rfile.read(-1) bloquerait le fil jusqu'à la fermeture
+                    raise ValueError("Content-Length hors bornes")
                 req = json.loads(self.rfile.read(n) or b"{}")
                 if not isinstance(req, dict):
                     raise ValueError
@@ -340,18 +428,12 @@ class Screen(http.server.BaseHTTPRequestHandler):
                     code, msg = launch(req)
                 elif self.path == "/rating":
                     code, msg = rate(req)
-                elif self.path == "/double":
-                    code, msg = double(req)
-                elif req.get("manuel") and run_proc is not None and run_proc.poll() is None:
-                    code, msg = 409, "test manuel en cours : pas de rattrapage"  # le saut vient de run.sh
-                elif valid_order(req):  # ordre de l'extension dj-auto : le saut est déjà fait dans Spotify
-                    threading.Thread(target=handle_order, args=(req,), daemon=True).start()
-                    code, msg = 202, "ordre reçu"
                 else:
-                    code, msg = 400, "ordre invalide"
+                    code, body = accept_order(req)
             except (ValueError, json.JSONDecodeError):
                 code, msg = 400, "demande invalide"
-        self._send(code, json.dumps({"message": msg}).encode(), "application/json")
+        out = body if body is not None else {"message": msg}
+        self._send(code, json.dumps(out, ensure_ascii=False).encode(), "application/json")
 
     def log_message(self, *a):
         pass
@@ -447,120 +529,90 @@ def _longest_silence(a, b):
 def _manual_window(o, idx):
     """Pour un changement non prévu : l'heure de l'événement de Spotify est approximative, mais espion a vu
     l'uri changer entre deux messages (250 ms) ; on cherche entre les deux, avec 200 ms de marge."""
-    new = [i for i, (n, info) in enumerate(tracks) if info.get("uri") == o.get("to_uri") and n > idx - 5 * SR]
+    new = [i for i, (n, info) in enumerate(tracks) if info.get("uri") == o.to_uri and n > idx - 5 * SR]
     if new and new[0] > 0:
         return tracks[new[0] - 1][0] - int(0.2 * SR), tracks[new[0]][0] + int(0.2 * SR)
     return idx - int(0.5 * SR), idx + int(0.4 * SR)
 
 
 def find_switch(o):
-    """(fin de A, début de B) dans la mémoire.
+    """(fin de A, début de B, marge sûre) dans la mémoire, pour un Ordre.
     - Saut vers un morceau seul (run.sh) : silence numérique (zéros exacts) ; on prend la plus longue suite de
-      quasi-zéros entre -50 et +400 ms de l'ordre, une fois ce son reçu (sinon la zone pas encore reçue
-      passerait pour du silence).
-    - Saut dans la playlist (`gapless`, mode auto) : aucun trou ni clic exploitable (mesuré le 2026-10-26) ; le
-      changement tombe SWITCH_S après l'ordre, avec une marge pour ne jamais prendre de B dans A. Si B commence
-      par son propre silence près de cette heure, son début est exact.
+      quasi-zéros entre -50 et +400 ms de l'ordre, une fois ce son reçu.
+    - Saut dans la playlist (`gapless`) : aucun trou ni clic exploitable ; le changement tombe SWITCH_S après
+      l'ordre, avec une marge pour ne jamais prendre de B dans A. Si B commence par son propre silence près de cette
+      heure, son début est exact.
     - Changement non prévu (`manuel`) : fenêtre donnée par espion."""
-    t_wall = float(o["t_wall"])
     deadline = time.time() + 10
-    while not clock or clock[-1][0] < t_wall:
+    while not clock or clock[-1][0] < o.t_wall:
         if time.time() > deadline:  # plus rien n'arrive de dj_in : l'ordre ne peut pas être situé
             raise ValueError("aucun son reçu depuis l'ordre")
         time.sleep(0.02)
-    idx = sample_at(t_wall)
-    a, b = _manual_window(o, idx) if o.get("manuel") else (idx - int(0.05 * SR), idx + int(0.4 * SR))
+    idx = sample_at(o.t_wall)
+    a, b = _manual_window(o, idx) if o.manuel else (idx - int(0.05 * SR), idx + int(0.4 * SR))
     Memoire.wait(b + int(0.05 * SR))
-    est = (a + b) // 2 if o.get("manuel") else idx + int(SWITCH_S * SR)
+    est = (a + b) // 2 if o.manuel else idx + int(SWITCH_S * SR)
     sil = _longest_silence(a, b)
-    if sil and not o.get("gapless"):
+    if sil and not o.gapless:
         return (*sil, 0)
     if sil and abs(sil[0] - est) < int(0.06 * SR):
         log("saut dans la playlist : B commence par un silence, son début est exact")
         return sil[0], sil[0], 0
-    if o.get("manuel"):  # fenêtre large : A s'arrête au début (côté sûr), B part du milieu
+    if o.manuel:  # fenêtre large : A s'arrête au début (côté sûr), B part du milieu
         log("changement à la main sans silence : fin de A au début de la fenêtre d'espion")
         return a, est, 0
     log("changement sans silence : placé à l'heure de l'ordre")
-    # B commence un peu avant l'estimation : la recherche de sa grosse caisse part de là et regarde devant.
-    # Pas de pas en avant pour la fin de A : le délai du saut n'est mesuré qu'à quelques dizaines de ms près, et
-    # quelques ms de B prises dans A se rejoueraient à chaque tour de boucle.
     return est - int(0.04 * SR), est - int(0.02 * SR), 0
 
 
-def _beats(v):
-    """Grille de temps envoyée par l'extension : au moins 8 temps, 120 au plus, en secondes, sinon None."""
-    try:
-        b = [float(x) for x in v][:120]
-    except (TypeError, ValueError):
-        return None
-    return b if len(b) >= 8 and all(-60 < x < 60 for x in b) else None
+def placer(o, end_a, start_b, ahead):
+    """Place de A et B dans la mémoire (contrat.Place). Avec une grille de Spotify, la fin de A est posée sur le
+    premier temps de la mesure de sortie et le début de B sur son temps d'entrée (grid_lag : toutes les attaques, pas
+    la plus forte) ; sans grille, ou si elle ne s'accorde pas au son (netteté < 1,5), recalage sur les grosses
+    caisses (grid_end) et netteté de la pulsation."""
+    K = X["calage"]
+    bar_a, bar_b = int(round(o.a.bar_s * SR)), int(round(o.b.bar_s * SR))
+    beats_a = beats_b = None
+    na = nb = 0.0
+    shift, how = 0, "grosses caisses"
+    if o.a.beats:
+        lag, st = K.grid_lag(Memoire, end_a, o.a.beats)
+        if st >= K.NETTETE_MIN:
+            lag_a = lag if lag <= ahead else lag - bar_a  # premier temps au-delà du raccord : la mesure d'avant
+            beats_a = np.round(end_a + lag + np.asarray(o.a.beats) * SR).astype(np.int64)
+            end_a, shift, na, how = end_a + lag_a, lag_a, st, "grille de Spotify"
+    if beats_a is None:
+        end_a, shift = K.grid_end(Memoire, end_a, bar_a / 4, ahead)
+        na = K.nettete_pulsation(Memoire, end_a - 4 * bar_a, end_a, bar_a / 4)
+    lag_b = None
+    if o.b.beats:
+        lag, st = K.grid_lag(Memoire, start_b, o.b.beats)
+        if st >= K.NETTETE_MIN:
+            lag_b = lag
+            beats_b = np.round(start_b + lag + np.asarray(o.b.beats) * SR).astype(np.int64)
+            start_b, nb = start_b + lag, st
+    if beats_b is None:
+        nb = K.nettete_pulsation(Memoire, start_b, start_b + 4 * bar_b, bar_b / 4)
+    log(f"changement repéré : fin de A à {end_a} (recalée de {shift / SR * 1000:+.0f} ms, {how}, netteté {na:.1f}), "
+        f"début de B à {start_b}{f' (grille de Spotify, {lag_b / SR * 1000:+.0f} ms)' if lag_b is not None else ''}"
+        f", netteté {nb:.1f}")
+    return X["contrat"].Place(fin_a=int(end_a), debut_b=int(start_b), bar_a=bar_a, bar_b=bar_b, beats_a=beats_a,
+                              beats_b=beats_b, nettete_a=float(na), nettete_b=float(nb))
 
 
 def prepare(o, ctx):
-    """Rend la recette demandée ; si elle refuse (calage impossible), se replie sur la montée courte, qui ne
-    demande aucun calage et fait monter les premières mesures de B quand il n'a pas été lancé en avance.
-    `ctx` reçoit de quoi rendre le secours si la transition ne peut pas être jouée."""
+    """Situe le saut, place A et B, puis rend la transition par l'échelle de repli (catalogue.rendre).
+    `ctx` reçoit la Place (pour le secours) et les modules utilisés. Rend (Rendu, replis au rendu, mesures)."""
     fresh()
-    R = rendu  # le module du rendu en cours, même s'il est rechargé entre-temps
-    renderers = R.RENDERERS
-    end_a, start_b, ahead = find_switch(o)  # ahead : marge sûre après la fin de A estimée
-    if o.get("manuel"):
+    mods = X  # les modules du rendu en cours, même s'ils sont rechargés entre-temps
+    ctx["mods"] = mods
+    end_a, start_b, ahead = find_switch(o)
+    if o.manuel:
         cancel_after(end_a)
-    bar = int(float(o["bar_s"]) * SR)
-    # rapport des mesures réelles de A et B quand l'extension les donne, sinon des tempos globaux
-    ratio = float(o["bar_b_s"]) / float(o["bar_s"]) if 0.3 < float(o.get("bar_b_s") or 0) < 5 else float(o["ratio"])
-    # Calage sur les grilles de temps de Spotify quand l'extension les envoie : la fin de A est posée sur le
-    # premier temps de la mesure de sortie, le début de B sur son temps de lancement. Les attaques servent
-    # seulement à trouver le décalage entre la mémoire et ces grilles (toutes les attaques, pas la plus forte,
-    # qui tombe à contretemps en rap). Sinon, ancien calage sur les grosses caisses.
-    beats_a, beats_b = _beats(o.get("beatsA")), _beats(o.get("beatsB"))
-    snap, how = True, "grosses caisses"
-    lag_a = lag_b = None
-    if beats_a:
-        lag, st = R.grid_lag(Memoire, end_a, beats_a)
-        if st >= 1.5:
-            lag_a = lag if lag <= ahead else lag - bar  # premier temps au-delà du raccord : la mesure d'avant
-    if lag_a is not None:
-        end_a, shift = end_a + lag_a, lag_a
-        how = "grille de Spotify"
-    else:
-        end_a, shift = R.grid_end(Memoire, end_a, float(o["bar_s"]) * SR / 4, ahead)
-    if beats_b:
-        lag, st = R.grid_lag(Memoire, start_b, beats_b)
-        if st >= 1.5:
-            lag_b, start_b, snap = lag, start_b + lag, False
-    log(f"changement repéré : fin de A à {end_a} (recalée de {shift / SR * 1000:+.0f} ms, {how}), début de B à "
-        f"{start_b}{f' (calé sur la grille de Spotify, {lag_b / SR * 1000:+.0f} ms)' if lag_b is not None else ''}")
-    ctx.update(end_a=end_a, start_b=start_b, bar=bar, ratio=ratio)
-    preset = recettes.ALIASES.get(o["mode"], o["mode"])
-    raison = o.get("raison")
-    pre = int(float(o.get("pre_s", 0)) * SR)
-    # Avance regagnée quand elle manque : jusqu'à 2 mesures de A prolongé de plus (au-delà, un creux s'entend).
-    # Jamais de raccourci quand elle dépasse : il écourtait la montée de B (« trop bref », essai 21) ; c'est
-    # le mélange qui la fait redescendre.
-    # Négatif (avance au-dessus de la cible de plus d'une demi-mesure) : le rendu arrondit au plus proche au
-    # lieu d'arrondir au-dessus, sinon l'avance dérive vers le haut transition après transition.
-    extra = int(np.clip(D * SR - current_delay(), -bar, 2 * bar))
-    if -bar // 2 < extra < 0:
-        extra = 0
-
-    def render(name):
-        kw = {"bars": int(o["bars"])} if name == "melange" and str(o.get("bars")) in ("4", "8") else {}
-        R._ctx.snap = snap
-        try:
-            return renderers[name](Memoire, end_a, start_b, bar, ratio, pre=pre, extra=extra, **kw)
-        finally:
-            R._ctx.snap = True
-    try:
-        out = render(preset)
-    except Exception as e:
-        if type(e).__name__ != "Refus":
-            raise
-        event("refus", f"refus de « {recettes.PRESETS[preset]['label']} » : {e} ; repli sur la montée courte")
-        raison, preset = f"repli : {e}", "montee_courte"
-        out = render(preset)
-    return (*out, preset, raison)
+    p = placer(o, end_a, start_b, ahead)
+    ctx["place"] = p
+    r, replis = mods["catalogue"].rendre(Memoire, o, p, avance=current_delay())
+    return r, replis, mods["mesures"].rapport(r, p)
 
 
 def control():
@@ -570,6 +622,8 @@ def control():
     while True:
         try:
             o = json.loads(s.recv(65536))
+            if not isinstance(o, dict):
+                raise ValueError("objet JSON attendu")
             if o.get("cmd") == "track":
                 pause_votes = pause_votes + 1 if o.get("paused") else 0
                 spotify_paused, last_track_t = pause_votes >= 2, time.time()
@@ -578,73 +632,99 @@ def control():
                     tracks.append((n, o))
                     track_samples.append(n)
                 continue
-            if valid_order(o):
-                threading.Thread(target=handle_order, args=(o,), daemon=True).start()
-            else:
-                log("ordre UDP invalide ignoré")
+            code, body = accept_order(o)
+            if code != 202:
+                event("refus", f"ordre UDP refusé ({code}) : {body['message']}")
         except Exception as e:  # un datagramme invalide ne doit pas couper les ordres suivants
             log("UDP :", repr(e))
 
 
-def schedule(o, out, end_a, margin):
+def schedule(o, r, p, margin):
     """Programme un segment rendu ; rend None, ou la raison pour laquelle il ne peut pas être joué."""
     global last_resume
-    start, seg, resume, g, preset, raison = out
-    p = recettes.PRESETS[preset]
-    frm = track_at(start)
-    info = {"from": frm and frm["name"], "from_uri": frm and frm.get("uri"), "bar_s": o["bar_s"],
-            "dur_s": max(len(seg) / SR, 0.01), "label": p["label"], "ingredients": p["ingredients"],
-            "raison": raison, "resume": resume, "gain": round(g, 2), **recettes.PHASES[preset],
-            # positions dans les morceaux, pour les cercles de l'app : fin de la transition dans A, durée
-            # réellement rejouée de A avant elle, point d'entrée (drop) dans B
-            "sortieA": o.get("sortieA"), "real_s": (end_a - start) / SR, "entreeB": o.get("entreeB")}
+    frm = track_at(r.debut)
+    info = {"id": o.id, "transition": r.transition, "from": frm and frm["name"], "from_uri": frm and frm.get("uri"),
+            "bar_s": o.a.bar_s, "dur_s": max(len(r.seg) / SR, 0.01), "raison": o.raison, "resume": r.reprise,
+            "gain": round(r.gain, 2),
+            # positions dans les morceaux, pour les cercles de l'app : sortie de A, durée réellement jouée de A
+            # dans le segment, point d'entrée dans B
+            "sortieA": o.a.point_s, "real_s": max(0, p.fin_a - r.debut) / SR, "entreeB": o.b.point_s}
     with lock:
-        if start < rp + margin:
-            # jouer maintenant ramènerait A en arrière
-            return f"« {p['label']} » prête trop tard ({(rp - start) / SR:+.1f} s)"
-        if start < last_resume:
-            return f"« {p['label']} » chevaucherait la transition précédente"
-        plan.append((start, seg, resume, preset, info, g))
+        if r.debut < rp + margin:
+            return f"{r.transition} prête trop tard ({(rp - r.debut) / SR:+.1f} s)"
+        if r.debut < last_resume:
+            return f"{r.transition} chevaucherait la transition précédente"
+        plan.append((r.debut, r.seg, r.reprise, r.transition, info, r.gain))
         plan.sort(key=lambda x: x[0])
-        last_resume = max(last_resume, resume)
-    log(f"transition prête : {p['label']}, {len(seg) / SR:.2f} s de segment, "
-        f"avance après {(current_delay() - (resume - start) + len(seg)) / SR:.1f} s")
+        last_resume = max(last_resume, r.reprise)
+    log(f"transition prête : {r.transition}, {len(r.seg) / SR:.2f} s de segment, "
+        f"avance après {current_delay() / SR:.1f} s")
     return None
 
 
-def track_sample(uri, pos_s):
-    """Échantillon de la mémoire où le morceau `uri` était à la position pos_s (s), d'après le dernier message
-    d'espion le concernant pendant la lecture."""
-    for n, info in reversed(tracks):
-        if info.get("uri") == uri and not info.get("paused"):
-            return int(n + (pos_s - info["pos_ms"] / 1000) * SR)
-    return None
+def rapport_vide(o, avance_avant):
+    """Squelette du rapport de l'ADR 0001."""
+    return {"id": o.id, "t": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "a": {"uri": o.a.uri, "nom": None, "sortie_s": o.a.point_s, "jamais_entendu_s": o.a.perdu_s},
+            "b": {"uri": o.b.uri or o.to_uri, "nom": None, "entree_s": o.b.point_s, "entree": o.b.entree,
+                  "saute_s": o.b.perdu_s},
+            "transition_demandee": o.choisie, "transition_jouee": None, "issue": "abandon",
+            "replis": list(o.replis_plan), "mesures": None, "avance_avant_s": round(avance_avant / SR, 2),
+            "avance_apres_s": None, "rendu_s": None, "marge_s": None, "ralenti": SLOW, "raison": o.raison}
 
 
-def double(req):
-    """Refrain doublé : rejouer les mesures [from_s, to_s) du morceau en cours juste après elles, comme un DJ de
-    rap qui double un refrain. Regagne autant d'avance, sans effet synthétique : chaque superposition réelle en
-    consomme (refonte du 26/10)."""
-    uri = str(req.get("uri", ""))
+def enregistrer(rap):
+    """Rapport ajouté aux récentes (/state) et au journal DJ_JOURNAL s'il est demandé."""
+    with lock:
+        recentes.appendleft(rap)
+    if JOURNAL:
+        try:
+            with open(JOURNAL, "a") as f:
+                f.write(json.dumps(rap, ensure_ascii=False) + "\n")
+        except OSError as e:
+            event("echec", f"journal DJ_JOURNAL inaccessible : {e!r}")
+
+
+def handle_order(o):
+    """Prépare puis programme une transition. Spotify a déjà sauté : si toute l'échelle échoue ou si le rendu est
+    prêt trop tard, un secours remplace la coupe sèche, tant que la lecture n'a pas atteint le changement. Chaque
+    ordre laisse un rapport (issue jouee, secours ou abandon)."""
+    log(f"ordre reçu : {o.id} {o.transition} (choisie {o.choisie}, replis {list(o.replis)})")
+    ctx = {}
+    rap = rapport_vide(o, current_delay())
+    t0 = time.time()
+    why = None
     try:
-        f, t, bar_s = float(req["from_s"]), float(req["to_s"]), float(req["bar_s"])
-    except (KeyError, TypeError, ValueError):
-        return 400, "demande invalide"
-    if not URI.match(uri) or not (0 <= f < t and 4 <= t - f <= 40 and 0.3 < bar_s < 5):
-        return 400, "demande invalide"
-    s_to = track_sample(uri, t)
-    if s_to is None or s_to + SR > written:
-        return 409, "ce passage n'est pas encore en mémoire"
-    # le point de reprise est recalé sur les temps du morceau ; la longueur rejouée reste celle de l'analyse
-    s_to, _ = rendu.grid_end(Memoire, s_to, bar_s * SR / 4)
-    s_from = s_to - int(round((t - f) * SR))
-    seg = rendu._finish(Memoire, s_to, read(s_from, s_to), s_to, 1.0)
-    o = {"bar_s": bar_s, "sortieA": None, "entreeB": None}
-    why = schedule(o, (*seg, "refrain", f"avance à regagner : {(t - f):.1f} s rejouées"), s_to, int(0.5 * SR))
-    if why:
-        event("abandon", f"refrain doublé : {why}")
-        return 409, why
-    return 202, "refrain doublé prévu"
+        r, replis, mes = prepare(o, ctx)
+        rap["replis"] += replis
+        rap["rendu_s"] = round(time.time() - t0, 2)
+        why = schedule(o, r, ctx["place"], int(0.5 * SR))
+        if why is None:
+            rap.update(transition_jouee=r.transition, issue="jouee", mesures=mes, marge_s=round((r.debut - rp) / SR, 2))
+    except Exception as e:  # le moteur doit survivre à un ordre raté
+        rap["replis"] += getattr(e, "replis", [])
+        why = f"échec de préparation : {e}" if type(e).__name__ == "Refus" else f"échec de préparation : {e!r}"
+    if why is not None:
+        if "place" not in ctx:
+            event("echec", f"{why} : transition abandonnée")
+        else:
+            try:
+                r = ctx["mods"]["boucle"].secours(Memoire, o, ctx["place"])
+                why2 = schedule(o, r, ctx["place"], int(0.15 * SR))
+                if why2 is None:
+                    rap.update(transition_jouee="secours", issue="secours", marge_s=round((r.debut - rp) / SR, 2))
+                    event("abandon", f"{why} : secours à la place")
+                else:
+                    event("abandon", f"{why} : transition abandonnée ({why2})")
+            except Exception as e:
+                event("echec", f"{why} ; secours impossible : {e!r}")
+    p = ctx.get("place")
+    if p is not None:
+        na, nb = track_at(p.fin_a - SR), track_at(p.debut_b + 3 * SR)
+        rap["a"]["nom"] = na and na["name"]
+        rap["b"]["nom"] = nb and nb["name"]
+    rap["avance_apres_s"] = round(current_delay() / SR, 2)
+    enregistrer(rap)
 
 
 def cancel_after(sample):
@@ -658,38 +738,6 @@ def cancel_after(sample):
         last_resume = max([p[2] for p in kept] + [rp if not seg_left else seg_resume])
     if dropped:
         event("abandon", "morceau changé pendant la montée de B : transition prévue annulée, rattrapage à la place")
-
-
-def handle_order(o):
-    """Prépare puis programme une transition (ordre de run.sh en UDP, ou de l'extension dj-auto en HTTP).
-    Spotify a déjà sauté : si la transition ne peut pas être jouée, un secours d'un temps remplace la coupe
-    sèche, tant que la lecture n'a pas atteint le changement."""
-    log("ordre reçu", o)
-    ctx = {}
-    try:
-        why = schedule(o, prepare(o, ctx), ctx["end_a"], int(0.5 * SR))
-    except Exception as e:  # la maquette doit survivre à un ordre raté
-        why = f"échec de préparation : {e!r}"
-    if why is None:
-        return
-    if "end_a" not in ctx:
-        event("echec", f"{why} : transition abandonnée")
-        return
-    try:
-        out = rendu.secours(Memoire, ctx["end_a"], ctx["start_b"], ctx["bar"], ctx["ratio"])
-        why2 = schedule(o, (*out, "secours", why), ctx["end_a"], int(0.15 * SR))
-        event("abandon", f"{why} : secours d'un temps à la place" if why2 is None else f"{why} : transition abandonnée")
-    except Exception as e:
-        event("echec", f"{why} ; secours impossible : {e!r}")
-
-
-def valid_order(o):
-    """Un ordre doit avoir les champs attendus, de bons types et un préréglage connu."""
-    try:
-        return (o.get("mode") in {*recettes.PRESETS, *recettes.ALIASES} and float(o["t_wall"]) > 0 and 0.3 < float(o["bar_s"]) < 5
-                and 0.3 < float(o["ratio"]) < 3 and 0 <= float(o.get("pre_s", 0)) < 40)
-    except (KeyError, TypeError, ValueError, AttributeError):
-        return False
 
 
 class Sortie:
@@ -715,15 +763,15 @@ def ramp_in(n):
 
 
 def slower():
-    """Regain d'avance imperceptible : chaque superposition réelle en consomme ~8 mesures. Entre les
-    transitions, tant que l'avance est sous la cible, la musique est jouée SLOW fois plus lentement, sans
-    changer la hauteur (rubberband), par tranches de 8 s raccordées au flux par des fondus de 15 ms. Un DJ fait
-    varier le tempo de cet ordre en permanence. (Le refrain doublé, l'autre moyen, a été jugé « absolument
-    horrible », essai 29.)"""
+    """Regain d'avance imperceptible : chaque superposition en consomme T mesures. Entre les transitions, tant que
+    l'avance est sous la cible, la musique est jouée SLOW fois plus lentement (DJ_SLOW, ×1,03 par défaut, ADR 0003),
+    sans changer la hauteur (rubberband), par tranches de 8 s raccordées au flux par des fondus de 15 ms."""
     global slow_next
     ctx, xf, span = int(0.3 * SR), int(0.015 * SR), 8 * SR
     while True:
         time.sleep(0.2)
+        if SLOW <= 1.0:  # ralenti coupé
+            continue
         try:
             if (not started or paused() or slow_next is not None or seg_left or stream_gain
                     or current_delay() > D * SR - SR // 2):
@@ -734,7 +782,7 @@ def slower():
                 nxt = plan[0][0] if plan else None
             if (nxt is not None and e + SR > nxt) or e + ctx > written:
                 continue
-            y = recettes._rubberband(read(s - ctx, e + ctx), ["-t", f"{SLOW}"])
+            y = X["outils"].rubberband(read(s - ctx, e + ctx), ["-t", f"{SLOW}"])
             a = int(round(ctx * SLOW))
             core = y[a:a + int(round(span * SLOW))].copy()
             core[:xf] = read(s, s + xf) * ramp_out(xf) + core[:xf] * ramp_in(xf)
@@ -760,11 +808,11 @@ def writer():
         with lock:
             p = plan[0] if plan else None
         if p and rp >= p[0]:
-            start, seg, resume, preset, info, g = p
+            _, seg, resume, preset, info, g = p
             to = track_at(resume + 3 * SR)
             with lock:
                 plan.pop(0)
-                current = {**info, "to": to and to["name"], "to_uri": to and to.get("uri"), "mode": preset,
+                current = {**info, "to": to and to["name"], "to_uri": to and to.get("uri"), "transition": preset,
                            "t0": time.time() + LAT}
             seg_resume, seg_left = resume, len(seg)
             k = 0
@@ -830,11 +878,18 @@ def writer():
         rp += n
 
 
-threading.Thread(target=reader, daemon=True).start()
-threading.Thread(target=control, daemon=True).start()
-threading.Thread(target=keep_routing, daemon=True).start()
-threading.Thread(target=slower, daemon=True).start()
-screen = http.server.ThreadingHTTPServer(("127.0.0.1", 47802), Screen)
-threading.Thread(target=screen.serve_forever, daemon=True).start()
-log("écran sur http://127.0.0.1:47802")
-writer()
+def main():
+    global D
+    D = float(sys.argv[1]) if len(sys.argv) > 1 else 60.0
+    threading.Thread(target=reader, daemon=True).start()
+    threading.Thread(target=control, daemon=True).start()
+    threading.Thread(target=keep_routing, daemon=True).start()
+    threading.Thread(target=slower, daemon=True).start()
+    screen = http.server.ThreadingHTTPServer(("127.0.0.1", 47802), Screen)
+    threading.Thread(target=screen.serve_forever, daemon=True).start()
+    log(f"écran sur http://127.0.0.1:47802 (ralenti ×{SLOW:.2f})")
+    writer()
+
+
+if __name__ == "__main__":
+    main()
