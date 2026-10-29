@@ -13,8 +13,7 @@ Statuts : ⬜ à faire · 🚧 en cours · ✅ fait · ⏳ en attente d'une déc
 | Tester la connexion extension → programme local | ✅ 2026-10-23 |
 | Relire Smart DJ, étudier Eternal Jukebox et l'existant | ✅ 2026-10-23 |
 | Tester tous les « supposé » : séries A, B, C (maquette E2) | ✅ 2026-10-23 |
-| Écouter les transitions de la maquette E2 | ✅ 2026-10-23 : montée continue validée, mix par fondu rejeté |
-| Recherche sur les techniques des DJ | ✅ 2026-10-23, cf. [`recherche/dj/`](recherche/dj/README.md) |
+| Recherche sur les transitions (plateformes, logiciels, méthodes des DJ) | ✅ refaite le 2026-10-28, cf. [`recherche/`](recherche/README.md) |
 | Observer une vraie pub avec l'API `inStreamApi` | ⏳ au premier passage de pub |
 | Documenter le tout | ✅ 2026-10-23 |
 
@@ -38,38 +37,37 @@ Objectif : des transitions calées sur le rythme et des effets de filtre piloté
 | Repli quand l'analyse manque, gestion des pubs | Extension |
 
 Choix techniques à trancher au démarrage de E1 :
-- **Partir de Smart DJ ou repartir de zéro** pour l'extension (cf. [`recherche/smart-dj.md`](recherche/smart-dj.md)).
+- **Partir de Smart DJ ou repartir de zéro** pour l'extension.
 - **Langage du programme local**.
 - **Installation du filtre** : chargé à la demande par le programme local, ou installé dans la config PipeWire.
 
-## E2 : module PipeWire avec avance ⬜
+## E2 : module PipeWire avec avance 🚧
 
 Objectif : superposition de deux morceaux, échange des basses, calage du tempo, boucle sans silence, « vinyle qui freine ». Conception dans [`architecture.md`](architecture.md#e2-le-module-avec-avance).
 
-Premier jalon à définir au démarrage : un module qui retarde le son de N secondes sans artefact, mesuré par enregistrement.
+| Tâche | Statut |
+|---|---|
+| Maquette Python : son retardé en mémoire, pause, rattrapage d'un changement manuel ([`proto/e2/`](../proto/e2/README.md)) | ✅ |
+| Calage des superpositions sur la grille de Spotify, 0 à 10 ms ([test 10](tests/10-calage.md)) | ✅ 2026-10-26 |
+| Mode DJ automatique dans Spotify ([`spicetify/`](../spicetify/README.md)) | ✅ |
+| **Transitions v2** refaites de zéro : catalogue C1-C8, replis R1/R2, placement, choix, voix ([spec](specs/transitions-v2.md)) | ✅ 2026-10-28, tests hors ligne au vert |
+| **Protocole d'écoute** : 16 paires, écoute à l'aveugle, note et étiquettes ([`specs/protocole-ecoute.md`](specs/protocole-ecoute.md)) | ⬜ prochaine étape ; URI des paires à remplir |
+| Calibrer la voix (paroles sur compte gratuit, V2/V3 sur ≥ 20 morceaux) | ⬜ tâche 2-direct de la spec |
+| Ajuster les poids de choix à la main d'après les notes | ⬜ après le protocole |
+| Réécrire le moteur en Rust ou C | ⬜ hors v1 |
 
 ## Décisions
 
-| Décision | Pourquoi |
-|---|---|
-| La **montée par roulements sans blanc** est la transition de référence | Validée à l'écoute ; un temps de silence avant le drop a déplu |
-| Le **fondu de volume seul** n'est pas une transition DJ | Rejeté deux fois à l'écoute, même calé sur le rythme |
-| Le **mélange** se fait temps par temps (tempo qui glisse), recalé à ±½ temps, avec échange des basses et filtre | Validé à l'écoute (« clean de fou ») ; méthode de l'article Spotify 2017 |
-| Les transitions sont des **recettes** d'ingrédients (volume, égaliseur, filtre, effets, boucle), choisies automatiquement | Modèle de Spotify Mix, cf. [`recherche/spotify-transitions.md`](recherche/spotify-transitions.md) |
-| Le mélange **décide de son refus sur 2 mesures de B** ; repli sur la **montée courte** (B monte sur ses premières mesures) ; une transition prête trop tard ou qui chevaucherait la précédente est **abandonnée** | Essai 12 : repli prêt 23 s trop tard et sec ; essai 13 validé (« c'était doux ») |
-| **Mode DJ automatique** (extension `dj-auto.js`) : chaque morceau enchaîne seul sur le suivant de la file, saut dans le contexte de lecture à la bonne position (une commande, ~5 ms de silence) | Demande du développeur ; placement validé à l'écoute (essai 14) |
-| **Variété par types** enchaînés par une chaîne de Markov (Vande Veire 2018) : B sur son drop, B depuis son début, mélange, drop swap ; puis un style du type selon l'énergie, jamais un des 2 derniers | « Toujours le même style, aucune originalité » (essai 14) ; revue du 2026-10-26 |
-| Styles doux : **B lancé 4 mesures avant** et monte sous A, **calé sur la pulsation de A** (tempo qui glisse vers celui de B, double / moitié compris) quand l'écart ramené est entre −15 et +18 % ; **atterrissage** avec un écho du dernier temps réel de A | Arrivée de B « parfois brutale, brève, sèche » avec 2 mesures (essai 14) |
-| Styles doux : **A prolongé** par du synthétique pendant que B monte, en mesures entières, au lieu de sauter les mesures de B : l'avance ne fond plus ; jusqu'à 4 mesures de plus pour la regagner après un mélange ; avance cible **60 s** | Bug de la revue : l'avance fondait de 6 à 10 s par transition, d'où des transitions abandonnées et des sauts secs |
-| **Mélange** seulement si tempos à 6 % près (double / moitié compris), tonalités à 1 cran sur la roue de Camelot, et au moins 16 mesures + 8 s d'avance | Un mélange consomme ~8 mesures d'avance ; le choix ne vérifiait que la fiabilité des tonalités |
-| **Niveau** : B ramené au niveau de A pendant la transition (borné 0,6 à 1,25), puis revient à son niveau en 16 s ; limiteur au lieu d'une normalisation globale | Saut de volume aux bords des segments (revue) |
-| Sorties et entrées sur des **débuts de phrase de 8 mesures** (à défaut 4) ; drop de B cherché dans sa **première moitié** | Kim et al. 2020 ; seuls 48 % des drops tombaient dans les 40 premiers % |
-| Chaque transition **se note de 1 à 5** dans l'app (journal `tests/notes-ecoute.jsonl`) | Remplacer « pas si ouf » par des chiffres pour régler les probabilités |
-| Chaque avis d'écoute est reporté dans [`gouts.md`](gouts.md) et dans [`tests/09-ecoute-maquette.md`](tests/09-ecoute-maquette.md) | Demande du développeur |
-| La **coupe seule** n'est jamais choisie d'office | Rejetée à l'écoute (« absolument horrible ») alors que la recherche la donne comme signature du rap |
-| Tout point de transition se **recale sur le son** (attaques de grosse caisse) | Les positions de Spotify ont laissé A et B décalés (accord 0,02) |
-| Choix de la transition selon le genre, le tempo, la tonalité, l'énergie, et sans répéter la précédente | Pratique des DJ, cf. [`recherche/dj/automatisation.md`](recherche/dj/automatisation.md) |
-| Tests d'écoute : un essai à la fois, annoncé, sur des morceaux pas encore entendus | Sans repères, le développeur ne sait pas ce qu'il entend |
+Les décisions de transition prises avant le 2026-10-28 (styles « doux », montée par roulements, mélange, drop swap, chaîne de Markov, refrain doublé…) sont **caduques**, comme les avis d'écoute qui les justifiaient : la v2 repart sans préférence enregistrée. Les décisions en vigueur sont :
+
+- la spec [`specs/transitions-v2.md`](specs/transitions-v2.md) (catalogue, placement, choix, repli, critères, objectifs O1-O8) ;
+- les ADR [`adr/`](adr/README.md) : contrat d'ordre v2 (0001), voix (0002), ralenti et quota du refrain (0003, provisoire), ancien code retiré (0004), modules (0005), traitement sans dépendance (0006).
+
+Le journal des notes d'écoute (`tests/notes-ecoute.jsonl`) repart vide : `e2.py` le crée à la première note. En v1, les notes ne règlent pas les poids automatiquement.
+
+## Questions ouvertes
+
+Q1 (ralenti de regain), Q2 (entrée sur le refrain) et Q3 (paroles sur compte gratuit) : cf. [§13 de la spec](specs/transitions-v2.md#13-questions-ouvertes). Pubs : observer `inStreamApi` au premier passage.
 
 ## Hors périmètre
 

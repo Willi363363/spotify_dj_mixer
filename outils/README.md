@@ -19,6 +19,8 @@ Scripts qui ont servi aux tests de [`../docs/tests/`](../docs/tests/README.md). 
 | [`choisir-paires.js`](choisir-paires.js) | Cherche dans une playlist les paires faciles à mixer (tempo, tonalité, fiabilité des mesures) | 09 |
 | [`dj-effets.conf`](dj-effets.conf) | Instance PipeWire : égaliseur 3 bandes, passe-haut, écho | 07 |
 | [`b-analyse.py`](b-analyse.py) | Égaliseur, écho, clics, avant / après, avec recalage | 07 |
+| [`maquette-auto.sh`](maquette-auto.sh) | Lance la maquette E2 (dj_in, `e2.py`, `espion.mjs`) à l'ouverture de Spotify et l'arrête à sa fermeture, sans toucher la sortie ni le micro par défaut | — |
+| [`installer-maquette-auto.sh`](installer-maquette-auto.sh) | Installe ce lancement automatique : mode débogage dans `~/.config/spotify-flags.conf` et service utilisateur `dj-maquette` ; `--retirer` pour l'enlever | — |
 
 La maquette E2 a son propre dossier : [`../proto/e2/`](../proto/e2/README.md).
 

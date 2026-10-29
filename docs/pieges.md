@@ -23,10 +23,15 @@ Format : **symptôme → cause → parade**.
 
 | Symptôme | Cause | Parade |
 |---|---|---|
-| Une boucle « sonne bizarre » alors que les chiffres de Spotify sont bons | `getProgress()` annonce la position **avant** que le son ne reparte : ~80 ms d'écart | Mesurer sur un enregistrement de la sortie son, jamais sur la position annoncée |
+| Une boucle sonne décalée alors que les chiffres de Spotify sont bons | `getProgress()` annonce la position **avant** que le son ne reparte : ~80 ms d'écart | Mesurer sur un enregistrement de la sortie son, jamais sur la position annoncée |
 | Coupe des basses inaudible | Haut-parleurs du portable | Casque, ou mesure par enregistrement |
 | Spotify en pause après l'arrêt du filtre de test | La sortie virtuelle disparaît, Spotify s'arrête | Relancer la lecture ; prévoir le cas dans le programme local |
 | La maquette ne trouve pas le changement de morceau (« aucun silence ») en mode auto | Un saut **dans la playlist** (`skipTo`) enchaîne A et B sans silence ni clic exploitable ; seul le saut vers un morceau seul laisse un trou | Changement placé à l'heure de l'ordre + 90 ms (`SWITCH_S` dans `e2.py`), avec une marge |
+| La dernière mesure de A manque (journal : fin de A « recalée de −1 600 à −2 500 ms ») ; une coupe sèche consomme ~2 s d'avance | Le 1 de sortie était bien en mémoire, mais `placer` le cherchait à ±150 ms de la fin estimée avec une mesure de temps **après** la sortie, c'est-à-dire sur le son de B : un lag positif le faisait reculer d'une mesure (10 essais sur 23). L'instant du saut varie de ±100 ms d'un essai à l'autre | Temps de A limités à la sortie (`dj-choix.js`), recherche dans [−320 ; +30] ms (`A_AVANT_S`, `A_APRES_S`, `e2.py`), saut 60 ms après la sortie (`LEAD = −60`) ; cf. [`tests/13-essai-direct-v2.md`](tests/13-essai-direct-v2.md) |
+| Un clic est signalé au premier ou au dernier échantillon d'un rendu réel, absent de l'enregistrement | Au bout d'un tableau, la médiane locale ne voit qu'un côté (ex. intro calme de B), le vrai flux est plus chargé | `mesures.rapport(..., complet=True, avant=…, apres=…)` avec le flux ; sans lui, les bornes de bord ne sont pas jugées |
+| Un « clic » sur un 1, alors que la sortie est fidèle au rendu | Attaque propre au morceau (premier temps accentué), plus forte que les temps voisins de référence | Chercher le même clic dans le flux de Spotify (`dj_in.monitor`) au même instant musical : s'il y est, ce n'est pas le moteur |
+| `echange_ms` de 400 à 550 ms sur une coupe sèche (C1) | B commence sans basse : la mesure voit sa première note de basse, pas la rampe | Ne juger le critère 9.1-3 que si B a des graves dès son 1 |
+| Paroles synchronisées absentes par rafales (`{"code":429}`) | L'adresse `color-lyrics` limite le débit (≈ 30 requêtes rapprochées) | Une requête toutes les 2 à 3 s au plus, en cache ; V1 retombe sur V2 sans erreur |
 
 ## PipeWire
 

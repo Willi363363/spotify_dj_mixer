@@ -16,7 +16,7 @@ Catalogue de tout ce qui a été envisagé. **E1** = prototype sans module audio
 | Réordonner les morceaux de la playlist | ❌ Seuls les morceaux ajoutés à la main sont modifiables | — | idem |
 | Bouton dans la barre de lecture, raccourci clavier | ✅ Testé | E1 | [06 A4](tests/06-serie-a-spotify.md#a4--interface-a4-interface-file-pubjs) |
 | Afficher tempo et tonalité | ✅ Testé (libellé du bouton) | E1 | idem |
-| Être prévenu d'une pub audio | ⚠️ API trouvée (`AdManagers.inStreamApi`), non observée en direct | E1 | [06 A6](tests/06-serie-a-spotify.md#a6--pubs) |
+| Être prévenu d'une pub audio | ⚠️ API trouvée (`AdManagers.inStreamApi`), non observée en direct (aucune pub non plus pendant l'essai 13, ~2 h) | E1 | [06 A6](tests/06-serie-a-spotify.md#a6--pubs) |
 
 ## Commandes du lecteur (Spotify)
 
@@ -29,7 +29,7 @@ Catalogue de tout ce qui a été envisagé. **E1** = prototype sans module audio
 | Trou au changement de morceau | ⚠️ **12 à 400 ms**, très variable | E1, supprimé en E2 | [06 A2](tests/06-serie-a-spotify.md#a2--transition-vers-le-drop-du-suivant-a2-transitionjs), [08](tests/08-serie-c-maquette-e2.md) |
 | Fondu de volume | ✅ Mesuré ; courbe au cube, ~12 réglages/s | E1 | [06 A3](tests/06-serie-a-spotify.md#a3--fondu-de-volume-a3-fondu-volumejs) |
 | Changer la vitesse de la musique | ❌ Testé : refusé par Spotify | — | [02](tests/02-vitesse-lecture.md) |
-| Fondu enchaîné natif, Spotify Mix | ❌ Premium uniquement | — | [recherche](recherche/etat-de-l-art.md) |
+| Fondu enchaîné natif, Spotify Mix | ❌ Premium uniquement | — | [recherche](recherche/plateformes.md) |
 
 ## Effets sur le son (PipeWire)
 
@@ -42,16 +42,16 @@ Catalogue de tout ce qui a été envisagé. **E1** = prototype sans module audio
 | Balayage sans clic | ⚠️ Clics mesurés avec les nœuds fournis | E1 avec effets lissés, ou E2 | idem |
 | Effets pilotés depuis l'extension | ✅ Connexion testée (0,7 ms) | E1 | [05](tests/05-connexion-locale.md) |
 | Son retardé en mémoire, sans perte | ✅ Mesuré (20,01 s, ressemblance 0,9998) | E2 | [08](tests/08-serie-c-maquette-e2.md) |
-| **Montée par roulements jusqu'au drop**, B qui monte sous la fin | ✅ **Validée à l'oreille** | E2 | [09](tests/09-ecoute-maquette.md) |
-| Superposer deux morceaux sans Premium | ✅ **Mélange validé à l'oreille** (tempo qui glisse, échange des basses) ; ❌ en simple fondu | E2 | [08](tests/08-serie-c-maquette-e2.md), [09](tests/09-ecoute-maquette.md) |
-| Choix automatique du préréglage et des points de transition | ✅ Testé à blanc sur 6 paires et en vrai | E2 | [09](tests/09-ecoute-maquette.md) |
-| Échange des basses entre les deux morceaux | ✅ Maquette | E2 | idem |
+| Superposer deux morceaux sans Premium | ✅ Maquette (mix de 4 mesures, échange des basses) | E2 | [08](tests/08-serie-c-maquette-e2.md) |
+| Temps de A et B ensemble pendant une superposition | ✅ Mesuré : 0 à 10 ms (grille de Spotify + correction) | E2 | [10](tests/10-calage.md) |
+| Échange des basses entre les deux morceaux | ✅ Maquette | E2 | [08](tests/08-serie-c-maquette-e2.md) |
 | Caler les tempos sans changer la hauteur | ✅ Maquette (`rubberband`) ; utile sous ~6 % d'écart | E2 | idem |
 | Boucle sans silence depuis la mémoire | ✅ Mesuré : aucun silence | E2 | idem |
 | Effet « vinyle qui freine » | ✅ Maquette | E2 | idem |
+| Catalogue v2 (C1-C8, replis R1/R2), placement et choix automatiques | ✅ Mesuré en direct dans Spotify (10 transitions, 16 paires, mode auto réel) ; **pas écouté** ; C7 seulement forcée (jamais éligible), voix V2/V3 peu fiables | E2 | [13](tests/13-essai-direct-v2.md), [spec](specs/transitions-v2.md), [protocole](specs/protocole-ecoute.md) |
 | Scratch sur le son déjà passé | Supposé, même mécanisme que le freinage | E2 | — |
 
-**Écoute** : cf. [`tests/09-ecoute-maquette.md`](tests/09-ecoute-maquette.md). Catalogue des transitions de DJ et leur état chez nous : [`recherche/dj/transitions.md`](recherche/dj/transitions.md).
+**Écoute** : aucune transition v2 n'a encore été jugée à l'oreille (essai 13 : mesures sur le son réel, extraits enregistrés pour l'écoute à l'aveugle) ; le protocole est dans [`specs/protocole-ecoute.md`](specs/protocole-ecoute.md). Transitions de DJ et ce qui est faisable chez nous : [`recherche/methodes-dj.md`](recherche/methodes-dj.md).
 
 ## Impossible
 
@@ -64,6 +64,6 @@ Catalogue de tout ce qui a été envisagé. **E1** = prototype sans module audio
 
 ## Coûts de l'étape E2
 
-- **Décalage écran / son** de l'avance (20 s dans la maquette ; à réduire).
-- **Pause, morceau suivant à la main, pubs** à faire traiter par le module.
+- **Décalage écran / son** de l'avance (~60 s dans la maquette ; à réduire).
+- **Pubs** à faire traiter par le module (pause et morceau changé à la main sont traités par la maquette).
 - **Moteur à écrire en Rust ou C** : la maquette Python a laissé passer 2 trous de 45 ms.

@@ -58,7 +58,7 @@ Un module maison qui **retarde le son de quelques secondes** et garde ces second
 | Boucle sans silence | Rejouer une mesure depuis la mémoire au lieu de faire sauter Spotify |
 | Masquer les micro-silences | Le module voit le trou arriver et le comble par un court fondu |
 
-**Budget d'avance** : superposer L secondes consomme L secondes d'avance. Il faut une avance au moins égale à la transition la plus longue, et la regagner ensuite. Dans la maquette, les styles doux prolongent A par du synthétique (boucles, roulements) pendant que B monte, ce qui conserve l'avance et permet d'en regagner ; seul le mélange en consomme (détail : [`proto/e2/README.md`](../proto/e2/README.md#avance-et-regain)).
+**Budget d'avance** : superposer L secondes consomme L secondes d'avance. Il faut une avance au moins égale à la transition la plus longue, et la regagner ensuite. En v2, la plupart des transitions ne superposent rien (avance intacte) ; C5 à C8 consomment T mesures, C4 en regagne 2, et le ralenti de regain (×1,03) rend le reste entre les transitions (cf. §4 et [ADR 0003](adr/0003-ralenti-et-quota-refrain.md)).
 
 **Points durs** :
 - détecter précisément l'instant du changement de morceau dans le flux (événement de l'extension + repérage du micro-silence) ;
@@ -67,3 +67,63 @@ Un module maison qui **retarde le son de quelques secondes** et garde ces second
 - décalage entre l'écran et le son, inhérent à l'avance.
 
 Modèle d'implémentation : le moteur de **Mixxx** (libre), pour les égaliseurs et le calage du tempo.
+
+## 4. Transitions v2
+
+Spec : [`specs/transitions-v2.md`](specs/transitions-v2.md). Décisions : [`adr/`](adr/README.md) (0001 à 0006).
+
+### Flux
+
+```
+Spotify (analyse getAudioData, paroles si drapeau)
+   │
+   ▼
+dj-voix.js ──► dj-placement.js ──► dj-choix.js ──► dj-auto.js ───────────── window.DJ ──► dj-mixer/index.js
+ voix/mesure    phrases, grille,     éligibilité,     tick, saut pile sur        (statut, forcer)   (écran, note
+ (V2 / V1)      sorties, E0-E2,      poids, variété,  le temps (switchAt),                          à l'aveugle)
+                ΔE, profil           tirage, repli    POST /order v2 ─────┐            ▲
+                                     au plan                              │            │ GET /state (rapport)
+                                                                          ▼            │ POST /rating {id, note…}
+e2.py : find_switch ─► Place (grid_lag / grid_end) ─► catalogue.rendre ─► schedule ─► lecture
+                                                       │  essaie transition puis replis :
+                                                       │  seches (C1-C3, R2) · boucle (C4, secours)
+                                                       │  superposees (C5-C8, R1) via calage + primitives
+                                                       │  voix.py (V3) pour dégrader
+                                                       └► mesures.rapport ─► derniere_transition (/state, DJ_JOURNAL)
+```
+
+- **Le plan est dans l'extension**, sur l'analyse de Spotify seule (H3). Le moteur ne fait que **dégrader** : il descend
+  l'échelle de repli quand une condition mesurée sur le son échoue (netteté, calage > 20 ms, voix, avance).
+- **Recouvrement** : Spotify saute de sortieA à entreeB ; le moteur superpose les T dernières mesures de A (déjà en mémoire)
+  aux T premières de B. Avance consommée = T mesures, regagnée par le ralenti (×1,03, `DJ_SLOW`) et par C4.
+- **Calage** : grille de Spotify (`beats` relatifs aux points) puis boucle de correction, extraits de l'ancien mélange
+  (`calage.py`).
+
+### Modules
+
+| Couche | Fichier | Responsabilité | Rôle |
+|---|---|---|---|
+| Extension | `spicetify/dj-voix.js` | voix par mesure (segments, paroles derrière `dj-mixer:paroles`) | data-ml-engineer |
+| | `spicetify/dj-placement.js` | §5 de la spec | data-ml-engineer |
+| | `spicetify/dj-choix.js` | §7 et §8 au plan, construction de l'ordre v2 | data-ml-engineer |
+| | `spicetify/dj-auto.js` | orchestration, `window.DJ` | data-ml-engineer |
+| | `spicetify/dj-catalogue.js` | libellés, couleurs, étapes de frise | ui-engineer |
+| | `spicetify/dj-mixer/index.js`, `proto/e2/ecran.html` | écrans | ui-engineer |
+| Moteur | `proto/e2/e2.py` | mémoire, repérage, ordre, échelle, rapport, HTTP | backend-dev |
+| | `proto/e2/transitions/contrat.py` | `Ordre`, `Place`, `Rendu`, `Automation`, validation | backend-dev |
+| | `transitions/outils.py`, `calage.py`, `primitives.py` | outils gardés, calage, EQ 3 bandes, courbes, écho | backend-dev |
+| | `transitions/seches.py`, `boucle.py`, `superposees.py` | rendus du catalogue | backend-dev |
+| | `transitions/catalogue.py` | fiches et échelle au rendu | backend-dev |
+| | `transitions/mesures.py` | critères 9.1 sur le son rendu | backend-dev |
+| | `transitions/voix.py` | V3 | data-ml-engineer |
+
+Signatures et propriété complète : [ADR 0005](adr/0005-modules-transitions.md). Format de l'ordre et du rapport :
+[ADR 0001](adr/0001-contrat-ordre-v2.md).
+
+### Tests hors ligne
+
+- Moteur : `python3 -I proto/e2/test_*.py`, sur `synthese.py` (grille connue, basse, voix factice).
+- Extension : `node --test spicetify/test/`, sur des analyses factices au format `getAudioData` et une réponse de paroles
+  factice. Les analyses réelles capturées plus tard vont dans `spicetify/test/fixtures/reelles/` (non commité).
+- Vérifications en direct (paroles sur compte gratuit, calibrage V2/V3, écoute) : tâche 2-direct et protocole §9.2, par le
+  développeur.

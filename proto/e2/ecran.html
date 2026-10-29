@@ -6,16 +6,19 @@
 <title>Mode DJ, écran</title>
 <style>
   :root { --bg: #0f1115; --card: #181b22; --text: #e8eaf0; --sub: #8b93a7; --line: #2a2f3a;
-          --a: #4f8cff; --b: #ff5ea8; --accent: #1ed760; --warn: #ffb020; }
+          --a: #4f8cff; --b: #ff5ea8; --accent: #1ed760; --warn: #ffb020; --bad: #ff5e7a; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; padding: 16px; }
   .wrap { max-width: 860px; margin: 0 auto; display: grid; gap: 14px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
-  .label { color: var(--sub); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .label { color: var(--sub); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin: 0; font-weight: 600; }
   .now { font-size: 28px; font-weight: 800; margin-top: 4px; }
   .now .a { color: var(--a); } .now .b { color: var(--b); }
   .count { font-size: 18px; color: var(--warn); font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
   .muted { color: var(--sub); }
+  .bad { color: var(--bad); }
+  .hidden { display: none !important; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   /* frise */
   .tl { position: relative; height: 170px; margin-top: 10px; }
   .lane { position: absolute; left: 0; right: 0; height: 40px; }
@@ -36,60 +39,126 @@
   .idle { color: var(--sub); padding: 30px 0; text-align: center; }
   .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 8px; }
   .controls label { display: grid; gap: 4px; font-size: 12px; color: var(--sub); flex: 1 1 220px; }
-  select, button { font: inherit; color: var(--text); background: var(--line); border: 1px solid #3a4150; border-radius: 8px; padding: 8px 10px; }
+  select, button, input, textarea { font: inherit; color: var(--text); background: var(--line); border: 1px solid #3a4150; border-radius: 8px; padding: 8px 10px; }
   button { cursor: pointer; font-weight: 700; }
   button.go { background: var(--accent); color: #0b1a10; border-color: var(--accent); }
   button:disabled { opacity: .45; cursor: not-allowed; }
   #msg { margin-top: 8px; min-height: 1.4em; }
-  .ingr { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .ingr span { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--line); }
-  .ingr b { color: var(--sub); font-weight: 600; margin-right: 4px; }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  /* interrupteur */
+  .switch { display: inline-flex; align-items: center; gap: 10px; background: none; border: 0; padding: 4px; font-weight: 600; }
+  .switch .track { width: 42px; height: 24px; border-radius: 999px; background: #3a4150; position: relative; transition: background .2s; flex: none; }
+  .switch .track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .switch[aria-checked="true"] .track { background: var(--accent); }
+  .switch[aria-checked="true"] .track::after { transform: translateX(18px); }
+  /* badges et notation */
+  .tag { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #111; white-space: nowrap; }
+  .tag.masque { background: var(--line); color: var(--sub); }
+  .tag.alerte { background: var(--bad); }
+  .rows { list-style: none; margin: 8px 0 0; padding: 0; }
+  .row { border-top: 1px solid var(--line); padding: 10px 0; }
+  .row:first-child { border-top: 0; }
+  .rowhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .rowhead .pair { flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rowhead button { padding: 4px 10px; font-size: 13px; }
+  .rapport { margin: 8px 0 0; padding-left: 18px; color: var(--sub); font-size: 13px; }
+  .form { margin-top: 10px; display: grid; gap: 10px; }
+  .stars { display: flex; gap: 4px; border: 0; margin: 0; padding: 0; }
+  .stars legend, .tags legend { font-size: 12px; color: var(--sub); padding: 0; margin-bottom: 4px; }
+  .stars button { font-size: 22px; line-height: 1; padding: 4px 8px; background: none; border-color: transparent; color: #4a5160; }
+  .stars button.on { color: var(--warn); }
+  .tags { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .tags label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; background: var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+  .tags input { margin: 0; accent-color: var(--warn); }
+  .form textarea { width: 100%; min-height: 2.4em; resize: vertical; }
+  .formfoot { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
-    <div class="label">Lancer une transition</div>
+<main class="wrap">
+  <div class="card bad hidden" id="offline" role="alert">Maquette éteinte : lance <code>proto/e2/e2.py</code>. Rien d'autre ne s'affiche tant qu'elle ne répond pas.</div>
+  <div class="card bad hidden" id="nocat" role="alert">Catalogue des transitions introuvable (<code>/dj-catalogue.js</code>) : identifiants affichés sans nom.</div>
+
+  <section class="card" aria-labelledby="hLancer">
+    <div class="top">
+      <h2 class="label" id="hLancer">Lancer une transition</h2>
+      <button type="button" class="switch" id="blind" role="switch" aria-checked="true">
+        <span class="track" aria-hidden="true"></span><span>Écoute à l'aveugle</span>
+      </button>
+    </div>
     <div class="controls">
       <label>Morceaux<select id="pair"></select></label>
-      <label>Transition<select id="mode">
-        <option value="auto">Auto (la maquette choisit)</option>
-        <option value="montee">Montée</option>
-        <option value="montee_courte">Montée courte</option>
-        <option value="melange">Mélange</option>
-        <option value="echo_doux">Écho</option>
-        <option value="retour_doux">Retour arrière</option>
-        <option value="frein_doux">Frein</option>
-        <option value="filtre">Balayage de filtre</option>
-        <option value="drop_swap">Drop swap</option>
-      </select></label>
-      <button class="go" id="go">Lancer</button>
-      <button id="again">Rejouer la dernière</button>
+      <label>Transition<select id="trans"></select></label>
+      <button type="button" class="go" id="go">Lancer</button>
+      <button type="button" id="again">Rejouer la dernière</button>
     </div>
-    <div class="muted" id="msg"></div>
-  </div>
-  <div class="card">
-    <div class="label">Dans tes haut-parleurs, maintenant</div>
+    <div class="muted" id="msg" aria-live="polite"></div>
+  </section>
+
+  <section class="card" aria-labelledby="hNow">
+    <h2 class="label" id="hNow">Dans tes haut-parleurs, maintenant</h2>
     <div class="now" id="now">…</div>
-    <div class="count" id="count"></div>
-  </div>
-  <div class="card">
-    <div class="label" id="tlTitle">Transition</div>
-    <div class="tl" id="tl"><div class="idle">Aucune transition prévue pour l'instant.</div></div>
+    <div class="count" id="count" aria-live="polite"></div>
+  </section>
+
+  <section class="card" aria-labelledby="tlTitle">
+    <h2 class="label" id="tlTitle">Transition</h2>
+    <div class="tl" id="tl" aria-hidden="true"><div class="idle">Aucune transition prévue pour l'instant.</div></div>
     <div class="muted" id="why" style="margin-top:14px"></div>
-    <div class="ingr" id="ingr"></div>
-  </div>
-  <div class="card">
-    <div class="label">Spotify joue réellement (en avance sur ce que tu entends)</div>
+  </section>
+
+  <section class="card" aria-labelledby="hNotes">
+    <h2 class="label" id="hNotes">À noter (10 dernières transitions)</h2>
+    <p class="muted" id="notesHelp" style="margin:6px 0 0;font-size:13px"></p>
+    <ul class="rows" id="rows"></ul>
+  </section>
+
+  <section class="card" aria-labelledby="hSpot">
+    <h2 class="label" id="hSpot">Spotify joue réellement (en avance sur ce que tu entends)</h2>
     <div><b id="spot">…</b> <span class="muted" id="spotArtist"></span></div>
     <div class="muted" id="delay"></div>
-  </div>
-</div>
+    <div class="bad" id="event"></div>
+  </section>
+</main>
+<script src="/dj-catalogue.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? '?').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const esc = (s) => String(s ?? '?').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmt = (s) => `${Math.max(0, s).toFixed(1)} s`;
 
+// Catalogue partagé (spicetify/dj-catalogue.js, servi par e2.py). Sans lui, l'écran marche avec les identifiants seuls.
+const CAT = globalThis.DJCore?.catalogue ?? {
+  JOUABLES: ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'R1', 'R2'],
+  ETIQUETTES: ['rythme_decroche', 'basses_doublees', 'voix_superposees', 'fin_coupee', 'mauvais_endroit', 'trop_long',
+    'trop_court', 'saut_volume', 'clic_trou', 'effet_de_trop'].map((k) => [k, k.replace(/_/g, ' ')]),
+  info: (id) => ({ id, nom: id ?? 'Transition', couleur: '#888888', phases: [], b_debut: 1 }),
+  masquer: (t) => String(t ?? '').replace(/\b(?:C[1-8]|R[1-3])\b|secours/gi, '?'),
+  nomCourt: (id) => String(id ?? 'aucune'),
+  lignesRapport: (r) => [`Demandée ${r.transition_demandee}, jouée ${r.transition_jouee}`],
+};
+$('nocat').classList.toggle('hidden', !!globalThis.DJCore?.catalogue);
+
+// ── Écoute à l'aveugle : nom caché jusqu'à la note ─────────────────────────────────────────────────
+const store = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* navigation privée */ } },
+};
+let aveugle = store.get('dj-ecran:aveugle', true);
+const notees = store.get('dj-ecran:notees', {});   // id → note envoyée (les 50 dernières)
+const visible = (id) => !aveugle || (id != null && notees[id] != null);
+const texte = (id, t) => (visible(id) ? String(t ?? '') : CAT.masquer(t));
+function setBlind(on) {
+  aveugle = on; store.set('dj-ecran:aveugle', on);
+  $('blind').setAttribute('aria-checked', String(on));
+  $('notesHelp').textContent = on
+    ? 'Écoute à l\'aveugle : le nom de chaque transition reste caché jusqu\'à ce que tu la notes.'
+    : 'Noms affichés tout de suite. La note reste possible.';
+  rowsSig = '';
+  if (state) { render(state); renderRows(state); }
+}
+$('blind').onclick = () => setBlind(!aveugle);
+
+// ── Dans tes haut-parleurs et frise ────────────────────────────────────────────────────────────────
 function view(s) {
   // t = temps écoulé depuis le début de la transition (négatif avant, au-delà de dur après)
   if (s.current) return { t: s.current.elapsed_s, x: s.current };
@@ -101,55 +170,164 @@ function view(s) {
 function render(s) {
   $('spot').textContent = s.spotify?.name ?? '…';
   $('spotArtist').textContent = s.spotify?.artist ?? '';
-  $('delay').textContent = `Le son que tu entends a ${s.delay_s.toFixed(0)} s de retard sur Spotify.`;
+  const low = s.delay_s < 0.6 * (s.target_s ?? 60);
+  $('delay').textContent = `Le son que tu entends a ${s.delay_s.toFixed(0)} s de retard sur Spotify (cible ${(s.target_s ?? 60).toFixed(0)} s).`;
+  $('delay').className = low ? 'bad' : 'muted';
+  const ev = (s.events ?? []).filter((e) => Date.now() / 1000 - e.t < 60).slice(-1)[0];
+  $('event').textContent = ev ? (aveugle ? CAT.masquer(ev.msg) : ev.msg) : '';
   const v = view(s);
   if (!v) {
     $('now').innerHTML = `<span class="a">${esc(s.heard?.name ?? '…')}</span>`;
-    $('count').textContent = ''; $('tlTitle').textContent = 'Transition'; $('why').textContent = ''; $('ingr').innerHTML = '';
+    $('count').textContent = ''; $('tlTitle').textContent = 'Transition'; $('why').textContent = '';
     $('tl').innerHTML = '<div class="idle">Aucune transition prévue pour l\'instant.</div>';
     return;
   }
-  const { t, x } = v, dur = Math.max(x.dur_s, 0.01), bFrom = (x.b_from ?? 1) * dur;
+  const { t, x } = v, dur = Math.max(x.dur_s, 0.01);
+  const vu = visible(x.id), fiche = CAT.info(x.transition);
+  const label = vu ? fiche.nom : 'Transition masquée';
+  const phases = vu && fiche.phases.length ? fiche.phases : [['?', 0, 1]];
+  const bFrom = (vu ? fiche.b_debut : 1) * dur;
   const A = esc(x.from), B = esc(x.to);
-  const phase = (x.phases ?? []).find(([, a, b]) => t >= a * dur && t < b * dur);
+  const phase = phases.find(([, a, b]) => t >= a * dur && t < b * dur);
 
   // Grande phrase : ce qu'on entend, et ce qui va arriver
   if (t < 0) {
     $('now').innerHTML = `<span class="a">${A}</span> seul`;
-    $('count').textContent = `${x.label} dans ${fmt(-t)}`;
+    $('count').textContent = `${label} dans ${fmt(-t)}`;
   } else if (t < dur) {
-    $('now').innerHTML = phase ? esc(phase[0]) : `${esc(x.label)} en cours`;
-    $('count').textContent = `${x.label} : encore ${fmt(dur - t)}, puis ${x.to ?? 'B'} seul`;
+    $('now').innerHTML = phase && phase[0] !== '?' ? esc(phase[0]) : 'Transition en cours';
+    $('count').textContent = `${label} : encore ${fmt(dur - t)}, puis ${x.to ?? 'B'} seul`;
   } else {
     $('now').innerHTML = `<span class="b">${B}</span> seul`;
-    $('count').textContent = `${x.label} terminée il y a ${fmt(t - dur)}`;
+    $('count').textContent = `${label} terminée il y a ${fmt(t - dur)}`;
   }
-  $('tlTitle').textContent = `${x.label} : ${x.from ?? 'A'} → ${x.to ?? 'B'}`;
-  $('why').textContent = x.raison ? `Pourquoi ce choix : ${x.raison}` : '';
-  $('ingr').replaceChildren(...Object.entries(x.ingredients ?? {}).map(([k, val]) => {
-    const el = document.createElement('span'), b = document.createElement('b');
-    b.textContent = k; el.append(b, val); return el;
-  }));
+  $('tlTitle').textContent = `${vu ? CAT.nomCourt(x.transition) : 'Transition ?'} : ${x.from ?? 'A'} → ${x.to ?? 'B'}`;
+  $('why').textContent = x.raison && vu ? `Pourquoi ce choix : ${x.raison}` : '';
 
   // Frise : de 8 s avant la transition à 8 s après
   const t0 = -8, t1 = dur + 8, pct = (u) => `${((u - t0) / (t1 - t0)) * 100}%`;
   const width = (a, b) => `${((b - a) / (t1 - t0)) * 100}%`;
-  const phases = (x.phases ?? []).map(([name, a, b]) =>
-    `<div class="phase ${phase && phase[0] === name ? 'on' : ''}" style="left:${pct(a * dur)};width:${width(a * dur, b * dur)}">${esc(name)}</div>`).join('');
+  const color = vu ? fiche.couleur : '';
+  const steps = phases.map(([name, a, b]) =>
+    `<div class="phase ${phase && phase[0] === name ? 'on' : ''}" style="left:${pct(a * dur)};width:${width(a * dur, b * dur)}${phase && phase[0] === name && color ? `;background:${color}` : ''}">${esc(name)}</div>`).join('');
   const ticks = [t0, 0, dur, t1].map((u) => `<span style="left:${pct(u)}">${u === 0 ? 'début' : u === dur ? 'fin' : ''}</span>`).join('');
   $('tl').innerHTML = `
     <div class="zone" style="left:${pct(0)};width:${width(0, dur)}"></div>
     <div class="lane laneA"><div class="name" style="left:0">A · ${A} (finit)</div>
       <div class="bar" style="left:0;width:${width(t0, 0)}"></div>
-      <div class="bar fade" style="left:${pct(0)};width:${width(0, dur)}"></div></div>
-    ${phases}
-    <div class="lane laneB"><div class="name" style="left:${pct(bFrom)}">B · ${B} (arrive)</div>
-      <div class="bar ${bFrom < dur ? 'fade' : ''}" style="left:${pct(bFrom)};width:${width(bFrom, dur)}"></div>
+      ${vu ? `<div class="bar fade" style="left:${pct(0)};width:${width(0, dur)}"></div>` : ''}</div>
+    ${steps}
+    <div class="lane laneB"><div class="name" style="left:${pct(Math.min(bFrom, dur - 0.01))}">B · ${B} (arrive)</div>
+      ${bFrom < dur ? `<div class="bar fade" style="left:${pct(bFrom)};width:${width(bFrom, dur)}"></div>` : ''}
       <div class="bar" style="left:${pct(dur)};width:${width(dur, t1)}"></div></div>
     <div class="head" style="left:${pct(Math.min(t1, Math.max(t0, t)))}"><span>maintenant</span></div>
     <div class="ticks">${ticks}</div>`;
 }
 
+// ── Notation par id (POST /rating, ADR 0001) ───────────────────────────────────────────────────────
+const brouillons = {};   // id → { note, etiquettes: Set, commentaire, msg, envoi }
+let ouvert = null;       // id dont le formulaire est ouvert (null = le plus récent entendu et pas noté)
+let rowsSig = '';
+let dessus = null;       // id le plus récent : quand il change, le formulaire se rouvre sur lui
+const brouillon = (id) => (brouillons[id] ??= { note: 0, etiquettes: new Set(), commentaire: '', msg: '', envoi: false });
+
+function etat(s, r) {
+  if (s.next?.id === r.id) return 'attente';
+  if (s.current?.id === r.id) return 'encours';
+  return 'entendue';
+}
+
+function badge(r) {
+  if (!visible(r.id)) return '<span class="tag masque">? masquée</span>';
+  if (r.issue === 'abandon') return '<span class="tag alerte">abandon (Spotify seul)</span>';
+  const f = CAT.info(r.transition_jouee);
+  const cls = r.issue === 'secours' ? 'tag alerte' : 'tag';
+  const style = r.issue === 'secours' ? '' : ` style="background:${esc(f.couleur)}"`;
+  const repli = r.replis?.length ? ' · repli' : '';
+  return `<span class="${cls}"${style}>${esc(CAT.nomCourt(r.transition_jouee))}${repli}</span>`;
+}
+
+function renderRows(s) {
+  const recents = s.transitions_recentes ?? [];
+  if (recents[0]?.id !== dessus) { dessus = recents[0]?.id ?? null; ouvert = null; }
+  const cible = ouvert ?? recents.find((r) => etat(s, r) === 'entendue' && notees[r.id] == null)?.id ?? null;
+  const sig = JSON.stringify([recents.map((r) => [r.id, etat(s, r), notees[r.id] ?? null]), cible, aveugle,
+    Object.entries(brouillons).map(([k, b]) => [k, b.msg, b.envoi])]);
+  if (sig === rowsSig) return;   // pas de reconstruction à chaque tick : le focus et la saisie restent
+  rowsSig = sig;
+  const garde = document.activeElement?.dataset?.focus;
+  if (!recents.length) { $('rows').innerHTML = '<li class="row muted">Rien à noter pour l\'instant.</li>'; return; }
+  $('rows').innerHTML = recents.map((r) => {
+    const e = etat(s, r), note = notees[r.id], open = r.id === cible && e === 'entendue';
+    const pair = `${esc(r.a?.nom)} → ${esc(r.b?.nom)}`;
+    const quand = e === 'attente' ? 'pas encore entendue' : e === 'encours' ? 'en cours…' : esc(r.t?.slice(11) ?? '');
+    const droite = e !== 'entendue' ? '' : note != null
+      ? `<span aria-label="Notée ${note} sur 5">${'★'.repeat(note)}${'☆'.repeat(5 - note)}</span>
+         <button type="button" data-act="ouvrir" data-id="${esc(r.id)}" data-focus="o-${esc(r.id)}" aria-expanded="${open}">Renoter</button>`
+      : `<button type="button" data-act="ouvrir" data-id="${esc(r.id)}" data-focus="o-${esc(r.id)}" aria-expanded="${open}">${open ? 'Fermer' : 'Noter'}</button>`;
+    const rapport = visible(r.id)
+      ? `<ul class="rapport">${CAT.lignesRapport(r).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '';
+    return `<li class="row" style="${e === 'entendue' ? '' : 'opacity:.6'}">
+      <div class="rowhead">${badge(r)}<span class="pair" title="${pair}">${pair}</span>
+        <span class="muted">${quand}</span>${droite}</div>
+      ${rapport}${open ? formulaire(r) : ''}</li>`;
+  }).join('');
+  if (garde) document.querySelector(`[data-focus="${CSS.escape(garde)}"]`)?.focus();
+}
+
+function formulaire(r) {
+  const b = brouillon(r.id), id = esc(r.id);
+  const stars = [1, 2, 3, 4, 5].map((n) => `<button type="button" class="${b.note >= n ? 'on' : ''}" data-act="note" data-id="${id}"
+    data-n="${n}" data-focus="n-${id}-${n}" aria-pressed="${b.note === n}" aria-label="Note ${n} sur 5">★</button>`).join('');
+  const tags = CAT.ETIQUETTES.map(([k, l]) => `<label><input type="checkbox" data-act="etiq" data-id="${id}" data-k="${k}"
+    data-focus="e-${id}-${k}" ${b.etiquettes.has(k) ? 'checked' : ''}>${esc(l)}</label>`).join('');
+  return `<form class="form" data-id="${id}" aria-label="Noter la transition ${esc(r.a?.nom)} vers ${esc(r.b?.nom)}">
+    <fieldset class="stars"><legend>Note (obligatoire)</legend>${stars}</fieldset>
+    <fieldset class="tags"><legend>Ce qui ne va pas (facultatif)</legend>${tags}</fieldset>
+    <label class="muted" style="display:grid;gap:4px;font-size:12px">Commentaire (facultatif)
+      <textarea data-act="comm" data-id="${id}" data-focus="c-${id}" maxlength="500">${esc(b.commentaire)}</textarea></label>
+    <div class="formfoot"><button type="submit" class="go" data-focus="s-${id}" ${b.note && !b.envoi ? '' : 'disabled'}>
+      ${b.envoi ? 'Envoi…' : 'Envoyer la note'}</button>
+      <span class="${b.msg.startsWith('!') ? 'bad' : 'muted'}" role="status">${esc(b.msg.replace(/^!/, ''))}</span></div>
+  </form>`;
+}
+
+$('rows').addEventListener('click', (ev) => {
+  const el = ev.target.closest('[data-act]');
+  if (!el) return;
+  const id = el.dataset.id;
+  if (el.dataset.act === 'ouvrir') { ouvert = ouvert === id ? '' : id; rowsSig = ''; renderRows(state); }
+  if (el.dataset.act === 'note') { brouillon(id).note = +el.dataset.n; rowsSig = ''; renderRows(state); }
+});
+$('rows').addEventListener('change', (ev) => {
+  const el = ev.target;
+  if (el.dataset.act !== 'etiq') return;
+  const set = brouillon(el.dataset.id).etiquettes;
+  el.checked ? set.add(el.dataset.k) : set.delete(el.dataset.k);
+});
+$('rows').addEventListener('input', (ev) => {
+  if (ev.target.dataset.act === 'comm') brouillon(ev.target.dataset.id).commentaire = ev.target.value;
+});
+$('rows').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const id = ev.target.dataset.id, b = brouillon(id);
+  if (!b.note || b.envoi) return;
+  b.envoi = true; b.msg = ''; rowsSig = ''; renderRows(state);
+  try {
+    const r = await fetch('/rating', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, note: b.note, etiquettes: [...b.etiquettes], commentaire: b.commentaire.slice(0, 500) }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      notees[id] = b.note;
+      const ids = Object.keys(notees); if (ids.length > 50) delete notees[ids[0]];
+      store.set('dj-ecran:notees', notees);
+      delete brouillons[id]; ouvert = null;
+    } else b.msg = r.status === 409 ? '!Transition trop ancienne : le moteur ne la connaît plus.' : `!Note refusée : ${j.message ?? r.status}.`;
+  } catch { b.msg = '!La maquette ne répond pas : ta saisie est gardée, réessaie.'; }
+  b.envoi = false; rowsSig = ''; render(state); renderRows(state);
+});
+
+// ── Lancer une transition (POST /run, DJ_WORK) ─────────────────────────────────────────────────────
 // Paires de morceaux déjà repérées comme faciles à mixer (tempo et tonalité proches)
 const PAIRS = [
   ['Money Pull Up → SO COMAN', '7Lr0PGZVb4EzyIhCIETFlG', '6W0iLz8aOKUzObanCzJj2U'],
@@ -167,36 +345,49 @@ const PAIRS = [
   ['Kitty Kitty → Elephant Man Bouyon', '78KqWSFU5tP9HWEprly7XS', '2Nc4LD9eToKbh8V3a8KxkE'],
 ];
 $('pair').innerHTML = PAIRS.map(([n], i) => `<option value="${i}">${esc(n)}</option>`).join('');
+$('trans').innerHTML = '<option value="auto">Auto (choix de la règle)</option>'
+  + CAT.JOUABLES.map((id) => `<option value="${id}">${esc(CAT.nomCourt(id))}</option>`).join('');
 
 let state = null;
 async function run(req) {
   $('msg').textContent = 'Envoi…';
   try {
     const r = await fetch('/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });
-    const j = await r.json();
+    const j = await r.json().catch(() => ({}));
     $('msg').textContent = r.ok
-      ? `C'est parti : Spotify rejoue le début, la transition passera dans environ 1 minute (suis le compte à rebours ci-dessous).`
-      : `Impossible : ${j.message}.`;
+      ? 'C\'est parti : Spotify rejoue le début, la transition passera dans environ 1 minute (suis le compte à rebours ci-dessous).'
+      : `Impossible : ${j.message ?? r.status}.`;
   } catch { $('msg').textContent = 'La maquette ne répond pas.'; }
 }
 $('go').onclick = () => {
   const [name, a, b] = PAIRS[+$('pair').value];
-  run({ mode: $('mode').value, a: `spotify:track:${a}`, b: `spotify:track:${b}`, name });
+  run({ transition: $('trans').value, a: `spotify:track:${a}`, b: `spotify:track:${b}`, name });
 };
-$('again').onclick = () => state?.last_request && run(state.last_request);
+// une demande d'avant la v2 (champ `mode`) serait refusée : on ne la rejoue pas
+const rejouable = (q) => q && typeof q.transition === 'string' && !('mode' in q);
+$('again').onclick = () => rejouable(state?.last_request) && run(state.last_request);
 
 function controls(s) {
   const blocked = !s.can_run || s.busy || !!s.next || !!s.current;
   $('go').disabled = blocked;
-  $('again').disabled = blocked || !s.last_request;
-  $('again').textContent = s.last_request ? `Rejouer : ${s.last_request.name ?? 'dernière'}` : 'Rejouer la dernière';
+  $('again').disabled = blocked || !rejouable(s.last_request);
+  $('again').textContent = rejouable(s.last_request) ? `Rejouer : ${s.last_request.name ?? 'dernière'}` : 'Rejouer la dernière';
   if (!s.can_run) $('msg').textContent = 'Boutons indisponibles : la maquette a été lancée sans les réglages DJ_WS et DJ_WORK.';
   else if (s.busy && !s.next) $('msg').textContent = 'Préparation : Spotify joue le morceau A jusqu\'à son point de sortie…';
 }
 
-async function tick() {
-  try { state = await (await fetch('/state', { cache: 'no-store' })).json(); render(state); controls(state); } catch { /* maquette arrêtée */ }
+function hors_ligne(off) {
+  $('offline').classList.toggle('hidden', !off);
+  for (const el of document.querySelectorAll('main > section')) el.classList.toggle('hidden', off);
 }
+
+async function tick() {
+  try {
+    state = await (await fetch('/state', { cache: 'no-store' })).json();
+    hors_ligne(false); render(state); controls(state); renderRows(state);
+  } catch { hors_ligne(true); }
+}
+setBlind(aveugle);
 setInterval(tick, 150);
 tick();
 </script>

@@ -1,6 +1,6 @@
 # 10 · Preuve du calage des superpositions
 
-Test du 2026-10-26, après « c'est toujours un fondu, sans caler aucun rythme » (essais 27-28). Objectif : prouver, **sur le son produit et avant toute écoute**, que les temps de A et de B tombent ensemble pendant une superposition. Seuil visé : 30 ms (au-delà, deux rythmes s'entendent décalés).
+Test du 2026-10-26. Objectif : prouver, **sur le son produit et avant toute écoute**, que les temps de A et de B tombent ensemble pendant une superposition. Seuil visé : 30 ms (au-delà, deux rythmes s'entendent décalés).
 
 ## Mesure
 
@@ -22,7 +22,7 @@ Une première mesure, qui comparait directement les attaques de A et de B, se co
 
 ## Ce qu'on en tire
 
-- **L'ancien calage ratait d'environ un demi-temps** : la grosse caisse la plus forte, en rap, tombe souvent à contretemps. C'est l'explication la plus probable du « fondu sans rythme ».
+- **L'ancien calage ratait d'environ un demi-temps** : la grosse caisse la plus forte, en rap, tombe souvent à contretemps.
 - Calage sur la **grille de temps de Spotify** (envoyée par l'extension) : 5 à 90 ms.
 - Puis **boucle de correction** (mesurer, relire B décalé, remesurer) : **0 à 10 ms** sur les 5 paires.
 - Limite : la correction et le contrôle utilisent la même mesure ; une vérification indépendante (enregistrement de la sortie, ou écoute) reste à faire. Sur Gazo → Wallace Cleaver, la netteté après correction est faible.

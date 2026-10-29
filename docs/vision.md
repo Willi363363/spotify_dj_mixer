@@ -9,7 +9,7 @@
 - **Superposition de deux morceaux** avec calage des tempos et échange des basses, comme sur une vraie table de mixage.
 - **Ralentis et accélérations** (effet « vinyle qui freine », ajustement de tempo pendant la transition).
 
-La référence citée est l'**AutoMix d'Apple Music**, qui fait déjà du calage de tempo et de temps (cf. [`recherche/etat-de-l-art.md`](recherche/etat-de-l-art.md)).
+La référence citée est l'**AutoMix d'Apple Music**, qui fait déjà du calage de tempo et de temps (cf. [`recherche/plateformes.md`](recherche/plateformes.md)).
 
 ## Contraintes
 
@@ -18,7 +18,7 @@ La référence citée est l'**AutoMix d'Apple Music**, qui fait déjà du calage
 | **Compte Spotify gratuit** (pas Premium) | Pas de fondu enchaîné natif, pas de Spotify Mix, pubs dans le flux. La superposition doit venir de nous (étape E2) |
 | **Client Spotify desktop sous Linux** (Arch) | Spicetify pour l'extension, PipeWire pour le son |
 | **Performance** | Aucun thème Spicetify (jugé trop coûteux). L'extension doit rester légère : du calcul à chaque changement de morceau, rien en continu |
-| **Rester dans le client officiel** | Pas de client tiers (librespot) ni de téléchargement de morceaux, cf. [`recherche/etat-de-l-art.md`](recherche/etat-de-l-art.md) |
+| **Rester dans le client officiel** | Pas de client tiers (librespot) ni de téléchargement de morceaux, cf. [`roadmap.md`](roadmap.md#hors-périmètre) |
 | **Pas d'accès au son dans Spotify** | Spotify décode le son hors de la partie web : une extension ne peut ni filtrer, ni changer la vitesse. Tout traitement du son passe par PipeWire |
 
 ## Ce que l'on ne cherche pas

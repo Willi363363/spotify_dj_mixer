@@ -1,0 +1,64 @@
+{
+  "_note": "État /state v2 factice (ADR 0001) pour essayer ecran.html et l'app Mode DJ sans Spotify ni moteur.",
+  "heard": { "uri": "spotify:track:7Lr0PGZVb4EzyIhCIETFlG", "name": "Money Pull Up", "artist": "transition en cours", "pos_s": null, "dur_s": null },
+  "spotify": { "uri": "spotify:track:6W0iLz8aOKUzObanCzJj2U", "name": "SO COMAN", "artist": "Artiste B", "pos_s": 64.2, "dur_s": 188.0 },
+  "delay_s": 54.2,
+  "target_s": 60,
+  "next": null,
+  "current": {
+    "id": "t-1730149451123-3", "transition": "C6",
+    "from": "Money Pull Up", "from_uri": "spotify:track:7Lr0PGZVb4EzyIhCIETFlG",
+    "to": "SO COMAN", "to_uri": "spotify:track:6W0iLz8aOKUzObanCzJj2U",
+    "dur_s": 8.0, "real_s": 8.0, "sortieA": 176.42, "entreeB": 0.48, "bar_s": 2.0, "elapsed_s": 3.1,
+    "raison": "court · g 1,8 % · k 1 · intro de B sans voix 6 mesures · poids C6 4,5 / C5 3 / C1 3"
+  },
+  "last": null,
+  "busy": false,
+  "can_run": true,
+  "last_request": { "transition": "auto", "a": "spotify:track:7Lr0PGZVb4EzyIhCIETFlG", "b": "spotify:track:6W0iLz8aOKUzObanCzJj2U", "name": "Money Pull Up → SO COMAN" },
+  "levels": [0.8, 0.7, 0.65, 0.5, 0.45, 0.4, 0.42, 0.38, 0.3, 0.28, 0.25, 0.2, 0.18, 0.12, 0.08, 0.05],
+  "events": [],
+  "notes": { "C5": 3.5, "C6": 4.0 },
+  "derniere_transition": {
+    "id": "t-1730149451123-3", "t": "2026-10-28 21:04:11",
+    "a": { "uri": "spotify:track:7Lr0PGZVb4EzyIhCIETFlG", "nom": "Money Pull Up", "sortie_s": 176.42, "jamais_entendu_s": 18.7 },
+    "b": { "uri": "spotify:track:6W0iLz8aOKUzObanCzJj2U", "nom": "SO COMAN", "entree_s": 0.48, "entree": "E0", "saute_s": 0.48 },
+    "transition_demandee": "C6", "transition_jouee": "C6", "issue": "jouee", "replis": [],
+    "mesures": { "calage_ms": 4.0, "nettete": 3.1, "basses_ms": 31, "echange_ms": 3, "voix_mesures": 0, "sonie_db": [-1.2, 0.8], "crete_dbfs": -0.6 },
+    "avance_avant_s": 58.3, "avance_apres_s": 54.2, "rendu_s": 1.7, "marge_s": 9.4, "ralenti": 1.03,
+    "raison": "court · g 1,8 % · k 1 · intro de B sans voix 6 mesures · poids C6 4,5 / C5 3 / C1 3"
+  },
+  "transitions_recentes": [
+    {
+      "id": "t-1730149451123-3", "t": "2026-10-28 21:04:11",
+      "a": { "uri": "spotify:track:7Lr0PGZVb4EzyIhCIETFlG", "nom": "Money Pull Up", "sortie_s": 176.42, "jamais_entendu_s": 18.7 },
+      "b": { "uri": "spotify:track:6W0iLz8aOKUzObanCzJj2U", "nom": "SO COMAN", "entree_s": 0.48, "entree": "E0", "saute_s": 0.48 },
+      "transition_demandee": "C6", "transition_jouee": "C6", "issue": "jouee", "replis": [],
+      "mesures": { "calage_ms": 4.0, "nettete": 3.1, "basses_ms": 31, "echange_ms": 3, "voix_mesures": 0, "sonie_db": [-1.2, 0.8], "crete_dbfs": -0.6 },
+      "avance_avant_s": 58.3, "avance_apres_s": 54.2, "rendu_s": 1.7, "marge_s": 9.4, "ralenti": 1.03,
+      "raison": "court · g 1,8 % · k 1 · intro de B sans voix 6 mesures · poids C6 4,5 / C5 3 / C1 3"
+    },
+    {
+      "id": "t-1730149300000-2", "t": "2026-10-28 21:01:40",
+      "a": { "uri": "spotify:track:1rO9az1C7u2RXUK0E9YfUi", "nom": "Tic", "sortie_s": 150.2, "jamais_entendu_s": 12.0 },
+      "b": { "uri": "spotify:track:1lpYczTQkuPn075NYrGyea", "nom": "La Choré Des Shattas", "entree_s": 8.1, "entree": "E1", "saute_s": 8.1 },
+      "transition_demandee": "C7", "transition_jouee": "C5", "issue": "jouee",
+      "replis": [
+        { "de": "C7", "vers": "C6", "raison": "avance 31 s < 8 mesures + 12 s", "ou": "plan" },
+        { "de": "C6", "vers": "C5", "raison": "voix mesurée sur 3 mesures de l'intro de B", "ou": "rendu" }
+      ],
+      "mesures": { "calage_ms": 7.5, "nettete": 2.2, "basses_ms": 40, "echange_ms": 6, "voix_mesures": 1, "sonie_db": [-2.0, 1.4], "crete_dbfs": -0.9 },
+      "avance_avant_s": 50.1, "avance_apres_s": 46.0, "rendu_s": 2.1, "marge_s": 6.0, "ralenti": 1.03,
+      "raison": "long · g 3,1 % · k 0 · poids C7 4 / C5 3"
+    },
+    {
+      "id": "t-1730149100000-1", "t": "2026-10-28 20:58:20",
+      "a": { "uri": "spotify:track:08bOtraHk8waBUt6sQOZce", "nom": "Shatta Mad", "sortie_s": 120.0, "jamais_entendu_s": 30.0 },
+      "b": { "uri": "spotify:track:3u023dY0esoiIcGwX1y6uu", "nom": "Shatta (DJ Chinwax)", "entree_s": 0, "entree": "E0", "saute_s": 0 },
+      "transition_demandee": "C3", "transition_jouee": "secours", "issue": "secours", "replis": [],
+      "mesures": { "calage_ms": null, "nettete": null, "basses_ms": 0, "echange_ms": null, "voix_mesures": null, "sonie_db": [-3.1, 2.2], "crete_dbfs": -1.0 },
+      "avance_avant_s": 40.0, "avance_apres_s": 40.0, "rendu_s": 3.0, "marge_s": -0.4, "ralenti": 1.03,
+      "raison": "court · contraste · Frein"
+    }
+  ]
+}
