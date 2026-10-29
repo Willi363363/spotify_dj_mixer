@@ -399,5 +399,37 @@ que `synthese.py` existe) et écran (ux-designer 13, puis ui-engineer 14 sur un 
   fin de A ; sinon aucune sortie ne peut la respecter (§5.5).
 - **O5**, écarts connus, affichés « ~ » par `test_criteres.py` sans le faire échouer : C4 à −5,5 dB (passe-haut jusqu'à
   800 Hz et volume 0,8 imposés par §4) ; C8 à 124 BPM ≈ −3 dB (A sous passe-haut, B sous passe-bas).
+- **R1 calé** (essai direct 13, [`../tests/13-essai-direct-v2.md`](../tests/13-essai-direct-v2.md#corrections-après-essai)), au
+  lieu de « sans étirement » du §8 : la phase réelle de A (ses 8 derniers temps) et de B (jusqu'à 16 temps depuis son
+  entrée : une entrée sans grosse caisse ou syncopée trompe une mesure sur 2 mesures) est mesurée sur leur son, à
+  ±120 ms des temps estimés (`superposees.phases_r1`). Les temps sont ceux de Spotify recalés (leur espacement réel :
+  la durée de mesure de Spotify peut différer de 2-3 % de la somme de ses temps), uniformes à défaut de grille
+  (revalidation du 2026-10-29). Le segment part du vrai 1 de la dernière mesure
+  de A ; la mesure de B qui précède son 1 final est étirée (`stretch_map`, 1 mesure, écart de tempo ≤ 25 %) pour que
+  ses temps tombent sur ceux de A, et son 1 final sur celui de A, où les graves s'échangent. Au-delà de 25 % (tempo
+  double ou moitié), pas d'étirement : seul le 1 final de B est posé sur celui de A. Phase d'un morceau non fiable
+  (son sans batterie : netteté < 3,5 ou accord < 0,6, `calage.phase_attaques` / `phase_fiable`) : ses temps estimés
+  sont gardés (« temps estimé » du §8), l'autre est corrigé quand même. Calage rapporté (9.1-1) : vrai 1 de B, d'après
+  ses attaques sur les 8 temps qui suivent son 1 final, moins vrai 1 de A, d'après ses 8 derniers temps
+  (`superposees.calage_r1`) ; `null` (« non mesurable ») si l'un des deux n'a pas d'attaques nettes. R1 ne refuse
+  toujours rien ; 9.1-1 (≤ 20 ms) et 9.1-3 s'appliquent à R1 (revalidation du 2026-10-29, QA).
+- **C5 à C8 sur les temps réels** : `calage.caler_superposition` pose chaque temps de Spotify recalé de A (ses 4T
+  derniers) et de B (ses 4T premiers) sur un repère de la grille commune (`calage.grille_temps`, uniforme à défaut ou
+  à tempo double / moitié), au lieu d'une grille uniforme mesure / 4. Le tempo glissé part des temps moyens réels.
+- **Fenêtre du 1 de sortie** (`e2.fenetre_un`) : [−320 ; +30] ms autour de la fin estimée de A tant qu'elle tient dans
+  0,85 temps ; au-delà (≳ 150 BPM), 0,85 temps recentrés sur la place attendue du 1 (110 ms avant la fin estimée).
+- **9.1-3 sur une coupe** (C1 à C4) : l'échange est l'entrée de B (premier échantillon non nul de sa piste ; A muet à
+  15 ms près), pas la 1re note de basse de B. Un B sans basse sur son 1 (808 sur le 2) donnait un faux écart d'un temps.
+  B doit aussi entrer sur **son** 1 : `echange_ms` est le plus grand de l'écart de l'entrée au 1 de A et de |phase des
+  attaques de B sur ses 8 temps après la jonction| (`mesures.phase_entree_b`, 100 ms après l'entrée ignorés) ; phase
+  non mesurable (B sans attaques nettes) : seule l'entrée compte.
+- **O5 redéfini** : saut de niveau perçu par rapport aux niveaux propres des deux morceaux. Sonie court terme (3 s) ≥ le
+  plus calme de A avant et de B après − 3 dB, et ≤ le plus fort + 2 dB (`mesures.sonie`, même forme `[min, max]` dans
+  le rapport). Égal à l'ancien critère quand A et B ont le même niveau ; l'ancien (écart à leur moyenne) était
+  inatteignable dès ~10 dB d'écart (17/31 en direct, A et B à 15-30 dB l'un de l'autre). **Le moteur ne relève pas B**
+  pendant la superposition : l'écart vient de l'intro calme de B, voulue ; la relever de 15 à 30 dB (puis la ramener)
+  trahirait le morceau et manquerait de marge de crête. On garde §3 : B baissé seulement (≥ 0,8) vers A, retour en 16 s.
+- **Clics (9.1-5)** : la référence « même phase 1 et 2 temps avant et après » est prise aux temps de A **et** de B : une
+  reprise de R1 calé tombe sur un temps de B.
 - **C7 rarement choisie** : elle exige une tonalité connue et proche, des tempos à 5 % et des bords sans voix, rarement
   réunis en rap FR (V2 juge souvent « vocal » un bord instrumental). À surveiller pendant le protocole d'écoute.

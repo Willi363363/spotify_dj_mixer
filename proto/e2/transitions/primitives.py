@@ -80,13 +80,31 @@ def lisser(g, ms=LISSAGE_MS):
     return (c[w:] - c[:-w]) / w
 
 
+def taille_rapide(n):
+    """Plus petite taille ≥ n de la forme 2^a 3^b 5^c : la FFT de numpy est lente sur une taille à grand facteur
+    premier (C7 de 8 mesures : 5 s au lieu de 0,3 s, critère 9.1-12 manqué sur une machine chargée)."""
+    n = int(n)
+    best = 1 << max(0, (n - 1).bit_length())
+    p5 = 1
+    while p5 < best:
+        p35 = p5
+        while p35 < best:
+            q = p35
+            while q < n:
+                q *= 2
+            best = min(best, q)
+            p35 *= 3
+        p5 *= 5
+    return best
+
+
 def bandes(x, fc=FC):
     """(graves, médiums, aigus) de x par FFT à phase nulle ; graves = |H_bas(fc0)|, aigus = 1 − |H_bas(fc1)|
     (amplitudes LR4 : 1 / (1 + (f/fc)^4)), médiums = le reste. graves + médiums + aigus = x."""
     if len(x) == 0:
         z = x.astype(np.float32)
         return z, z, z
-    n = 2 * len(x)
+    n = taille_rapide(2 * len(x))
     f = np.fft.rfftfreq(n, 1 / SR)[:, None]
     X = np.fft.rfft(x, n=n, axis=0)
     hb = 1 / (1 + (f / fc[0]) ** 4)

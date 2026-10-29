@@ -219,7 +219,7 @@ echelle("toute l'échelle refusée → Refus (secours)", m, S.ordre("C5", bpm_b=
 
 vrai = V.voix_par_mesure
 try:
-    V.voix_par_mesure = lambda x, bornes: np.full(len(bornes) - 1, 0.9)  # voix partout
+    V.voix_par_mesure = lambda x, bornes: np.full(len(bornes) - 1, 1.0)  # voix partout (≥ SEUIL_REPLI_RENDU)
     m = S.Mem(120, riche=True)
     echelle("voix sur la mesure bouclée : C4 → C1", m, S.ordre("C4", replis=["C1", "R2"]), m.place(), ["C4", "C1"],
             raison="bouclée")
@@ -289,30 +289,39 @@ for ident, bpm_b, attendu in (("C6", 124, ("C6", "jouee")), ("C5", 140, ("secour
 # A joue encore 60 à 300 ms après son 1, puis B commence par une attaque forte. Le moteur doit poser la fin de A sur
 # ce 1 : ni une mesure plus tôt (défaut vu en direct), ni sur une attaque de B. Ordres v2 actuels (temps de A
 # jusqu'à la sortie) et anciens (une mesure de temps après la sortie, tombant dans B).
-a_long = S.track(120, 50.0, 220, basse=True, seed=1, riche=True)   # 25 mesures : le 1 de sortie à 48 s
-b_son = S.track(126, 30.0, 330, basse=True, seed=2, riche=True)
-un = 48 * SR
-for apres_ms in (30, 60, 150, 230, 300):   # 30 ms : le 1 tombe entre la fin estimée de A et le début estimé de B
-    for ancien in (False, True):
-        buf = np.concatenate([a_long[:un + int(apres_ms / 1000 * SR)], b_son])
-        e2.buf[:] = 0
-        e2.buf[:len(buf)] = buf
-        e2.written = len(buf)
-        saut = un + int(apres_ms / 1000 * SR)
-        t = time.time() * 1000
-        idx = saut - int(e2.SWITCH_S * SR)        # l'ordre part SWITCH_S avant le changement dans le flux
-        with e2.clock_lock:
-            e2.clock[:] = [(t - idx / SR * 1000, 0), (t + (len(buf) - idx) / SR * 1000, len(buf))]
-        d = S.ordre_dict("C1", t_wall=t, gapless=True, bpm_a=120, bpm_b=126)
-        if not ancien:
-            d["a"]["beats"] = [round(-2 + k * 0.5, 4) for k in range(5)] + [round(-4 + k * 0.5, 4) for k in range(4)]
-            d["a"]["beats"].sort()
-        o = valider_ordre(d)
-        fin_a, debut_b, ahead = e2.find_switch(o)
-        pl = e2.placer(o, fin_a, debut_b, ahead)
-        err = (pl.fin_a - un) / SR * 1000
-        verifie(f"placement : saut {apres_ms} ms après le 1 ({'ancien ordre' if ancien else 'ordre v2'}) → fin de A sur ce 1 "
-                f"(±15 ms)", abs(err) <= 15, f"{err:+.0f} ms")
+# QA de l'essai 13 : aux tempos rapides (190, 200 BPM), la fenêtre (< 1 temps) est recentrée sur la place attendue du 1
+# (e2.fenetre_un) : un saut 30 à 250 ms après le 1 (60 + 90 ± 100 ms) doit encore y tomber.
+for bpm_a, retards in ((120, (30, 60, 150, 230, 300)), (190, (30, 60, 150, 230, 250)), (200, (30, 60, 150, 230, 250))):
+    beat_s = 60 / bpm_a
+    a_long = S.track(bpm_a, 50.0, 220, basse=True, seed=1, riche=True)
+    un = int(round(int(48 / (4 * beat_s)) * 4 * beat_s * SR))                  # un 1 de sortie vers 48 s
+    b_son = S.track(126, 30.0, 330, basse=True, seed=2, riche=True)
+    av, ap = e2.fenetre_un(beat_s)
+    verifie(f"fenêtre du 1 à {bpm_a} BPM : < 0,9 temps et couvre un saut {retards[0]} à {retards[-1]} ms après le 1",
+            av + ap < 0.9 * beat_s and av >= retards[-1] / 1000 - 0.04 and ap >= 0.04 - retards[0] / 1000,
+            f"[−{av * 1000:.0f} ; +{ap * 1000:.0f}] ms")
+    for apres_ms in retards:   # 30 ms : le 1 tombe entre la fin estimée de A et le début estimé de B
+        for ancien in (False, True):
+            buf = np.concatenate([a_long[:un + int(apres_ms / 1000 * SR)], b_son])
+            e2.buf[:] = 0
+            e2.buf[:len(buf)] = buf
+            e2.written = len(buf)
+            saut = un + int(apres_ms / 1000 * SR)
+            t = time.time() * 1000
+            idx = saut - int(e2.SWITCH_S * SR)        # l'ordre part SWITCH_S avant le changement dans le flux
+            with e2.clock_lock:
+                e2.clock[:] = [(t - idx / SR * 1000, 0), (t + (len(buf) - idx) / SR * 1000, len(buf))]
+            d = S.ordre_dict("C1", t_wall=t, gapless=True, bpm_a=bpm_a, bpm_b=126)
+            if not ancien:
+                d["a"]["beats"] = sorted([round(-4 * beat_s + k * beat_s, 4) for k in range(5)]
+                                         + [round(-8 * beat_s + k * beat_s, 4) for k in range(4)])
+            o = valider_ordre(d)
+            fin_a, debut_b, ahead = e2.find_switch(o)
+            pl = e2.placer(o, fin_a, debut_b, ahead)
+            err = (pl.fin_a - un) / SR * 1000
+            nom = "ancien ordre" if ancien else "ordre v2"
+            verifie(f"placement à {bpm_a} BPM : saut {apres_ms} ms après le 1 ({nom})"
+                    f" → fin de A sur ce 1 (±15 ms)", abs(err) <= 15, f"{err:+.0f} ms")
 
 print("RÉSULTAT :", "tout passe" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)

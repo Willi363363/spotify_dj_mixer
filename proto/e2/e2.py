@@ -62,6 +62,7 @@ GAIN_S = 16          # durée du retour du gain de B à 1 après une transition
 SWITCH_S = 0.09      # délai entre l'ordre de saut et le changement dans le flux (mesuré, saut dans la playlist)
 A_AVANT_S = 0.32     # le 1 de sortie de A est cherché jusqu'à 320 ms avant la fin estimée de A (LEAD = −60 ms)…
 A_APRES_S = 0.03     # … et jusqu'à 30 ms après
+A_CENTRE_S = 0.11    # place attendue du 1 avant la fin estimée de A : LEAD 60 + SWITCH_S 90 − marge 40 ms
 SLOW = _slow(os.environ.get("DJ_SLOW", "1.03"))
 BLOCK = 1024
 MAX_CORPS = 65536    # corps JSON d'un POST (ordre v2 avec 2 × 120 temps : ~5 Ko), au-delà : 400
@@ -569,6 +570,17 @@ def find_switch(o):
     return est - int(0.04 * SR), est - int(0.02 * SR), int(0.02 * SR)
 
 
+def fenetre_un(beat_s):
+    """(avant, après) en s : fenêtre où chercher le 1 de sortie de A autour de sa fin estimée. [−A_AVANT_S ;
+    +A_APRES_S] tant qu'elle tient dans 0,85 temps (deux temps n'y tiennent pas) ; au-delà (≳ 150 BPM), elle est
+    raccourcie à 0,85 temps et recentrée sur la place attendue du 1 (A_CENTRE_S avant la fin estimée), sans sortir de
+    [−A_AVANT_S ; +A_APRES_S]. Avant (QA de l'essai 13) : seul le côté « avant » rétrécissait, et au-delà de ~185 BPM
+    la fenêtre ne couvrait plus un saut tardif (60 + 90 ± 100 ms après le 1)."""
+    w = min(A_AVANT_S + A_APRES_S, 0.85 * beat_s)
+    c = min(max(A_CENTRE_S, w / 2 - A_APRES_S), A_AVANT_S - w / 2)
+    return c + w / 2, w / 2 - c
+
+
 def placer(o, end_a, start_b, ahead):
     """Place de A et B dans la mémoire (contrat.Place). Avec une grille de Spotify, la fin de A est posée sur le
     premier temps de la mesure de sortie et le début de B sur son temps d'entrée (grid_lag : toutes les attaques, pas
@@ -585,9 +597,9 @@ def placer(o, end_a, start_b, ahead):
         # [end_a − A_AVANT_S ; end_a + A_APRES_S], fenêtre plus courte qu'un temps (sinon deux temps y tiennent).
         # Essai direct 13 : à ±150 ms autour de end_a, avec les temps d'après la sortie calés sur les attaques de B,
         # le moteur reculait d'une mesure entière dans 10 essais sur 23.
-        av = min(A_AVANT_S, 0.85 * o.a.bar_s / 4 - A_APRES_S)
-        mi = (av - A_APRES_S) / 2
-        lag, st = K.grid_lag(Memoire, end_a - int(mi * SR), beats_av, max_ms=(av + A_APRES_S) / 2 * 1000)
+        av, ap = fenetre_un(o.a.bar_s / 4)
+        mi = (av - ap) / 2
+        lag, st = K.grid_lag(Memoire, end_a - int(mi * SR), beats_av, max_ms=(av + ap) / 2 * 1000)
         lag -= int(mi * SR)
         if st >= K.NETTETE_MIN:
             lag_a = lag if lag <= ahead else lag - bar_a  # premier temps au-delà du raccord : la mesure d'avant

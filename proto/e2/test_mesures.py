@@ -61,6 +61,47 @@ pb3[:cut + d] = 0
 ech = M.echange(pa, pb3, uns)
 verifie("échange 30 ms après le 1 → vu", ech is not None and ech >= 20, f"{ech} ms")
 verifie("échange : B sans graves → None", M.echange(pa, np.zeros_like(pb), uns) is None)
+# Coupe dont B n'a pas de basse sur son 1 (essai direct 13, a13 et g13 : +444 et +386 ms, un temps de B) : les graves
+# passent à l'entrée de B, pas à sa 1re note de basse.
+b_sur_2 = S.track(120, 16, 330, basse=True, seed=2, basse_des=1)
+pb4 = b_sur_2.copy()
+pb4[:cut] = 0
+ech = M.echange(pa, pb4, uns)
+verifie("échange d'une coupe, basse de B sur le 2 → au 1 (pas un temps plus tard)", ech is not None and ech <= 10,
+        f"{ech} ms")
+pb5 = b_sur_2.copy()
+pb5[:cut + d] = 0
+ech = M.echange(pa, pb5, uns)
+verifie("échange d'une coupe : B entré 30 ms après le 1 → vu", ech is not None and 25 <= ech <= 35, f"{ech} ms")
+# Coupe (QA de l'essai 13) : B entre pile au 1 de A mais 40 ms après son propre 1 (ses temps arrivent 40 ms trop tôt).
+# L'entrée seule ne le voit pas ; la phase des attaques de B après la jonction, si.
+d40 = int(0.04 * SR)
+pb7 = np.zeros_like(b)
+pb7[cut:len(b) - d40] = b[cut + d40:]
+ech0 = M.echange(pa, pb7, uns)
+ech = M.echange(pa, pb7, uns, beat_b=beat)
+ph = M.phase_entree_b(pb7, cut, beat)
+verifie("coupe : B entré au 1 de A mais 40 ms après son propre 1 → vu par la phase de ses attaques",
+        ech0 <= 10 and ech is not None and 35 <= ech <= 50 and ph is not None and ph[0] < 0,
+        f"entrée seule {ech0} ms, avec la phase {ech} ms ({ph[0]:+.0f} ms)" if ph else f"{ech0} / {ech}")
+ech = M.echange(pa, pb, uns, beat_b=beat)
+verifie("coupe : B entré sur son propre 1 → ≤ 10 ms avec la phase", ech is not None and ech <= 10, f"{ech} ms")
+pb8 = np.zeros_like(b)
+pb8[cut:] = bruit[cut:]
+ech = M.echange(pa, pb8, uns, beat_b=beat)
+verifie("coupe : B sans attaques (bruit) → phase non mesurable, seule l'entrée compte",
+        M.phase_entree_b(pb8, cut, beat) is None and ech is not None and ech <= 10, f"{ech} ms")
+# Superposition : A et B sonnent ensemble ; la rampe des graves (30 ms) finit 60 ms après le 1 → vue
+from transitions import primitives as P  # noqa: E402
+ga, gb = P.echange_basses(L, cut + 2 * d)
+pa6 = P.eq3(a, graves=ga())
+pb6 = P.eq3(b, graves=gb())
+ech = M.echange(pa6, pb6, uns)
+verifie("échange d'une superposition, rampe finie 60 ms après le 1 → vu", ech is not None and 30 <= ech <= 60,
+        f"{ech} ms")
+ga, gb = P.echange_basses(L, cut)
+ech = M.echange(P.eq3(a, graves=ga()), P.eq3(b, graves=gb()), uns)
+verifie("échange d'une superposition au 1 → ≤ 10 ms", ech is not None and ech <= 10, f"{ech} ms")
 
 # 4. Trous
 x = a.copy()
@@ -100,11 +141,23 @@ verifie("rapport : avec le flux, marche de 0,3 au raccord de fin → vue", r2["c
 
 # 6. Niveau et crête
 lo, hi = M.sonie(a, a[:4 * SR], b[-4 * SR:])
-verifie("sonie : même niveau → ≈ 0 dB", -1 < lo <= hi < 1, f"[{lo:.2f} ; {hi:.2f}]")
+verifie("sonie : même niveau → ≈ 0 dB", -1 < lo < 1 and -1 < hi < 1, f"[{lo:.2f} ; {hi:.2f}]")
 y = a.copy()
 y[6 * SR:10 * SR] *= 0.5
 lo, hi = M.sonie(y, a[:4 * SR], b[-4 * SR:])
 verifie("sonie : creux de −6 dB → vu", lo < -4, f"[{lo:.2f} ; {hi:.2f}]")
+# O5 redéfini (essai direct 13, spec §14) : relatif aux niveaux propres de A et de B, pas à leur moyenne
+calme = b * 0.1  # B 20 dB sous A (intro calme)
+y = np.concatenate([a[:4 * SR], calme[:4 * SR]])
+lo, hi = M.sonie(y, a[:4 * SR], calme[-4 * SR:])
+verifie("sonie : A puis B 20 dB plus calme → pas un défaut", -3 <= lo and hi <= 2, f"[{lo:.2f} ; {hi:.2f}]")
+verifie("sonie : écart des niveaux propres ≈ −20 dB", abs(M.ecart_niveaux(a[:4 * SR], calme[-4 * SR:]) + 20) < 1)
+y2 = np.concatenate([a[:4 * SR], calme[:4 * SR] * 0.5, calme[:4 * SR]])
+lo, hi = M.sonie(y2, a[:4 * SR], calme[-4 * SR:])
+verifie("sonie : creux de −6 dB sous le plus calme des deux → vu", lo < -4, f"[{lo:.2f} ; {hi:.2f}]")
+y3 = np.concatenate([calme[:4 * SR], a[:4 * SR] * 2, a[:4 * SR]])
+lo, hi = M.sonie(y3, calme[:4 * SR], a[-4 * SR:])
+verifie("sonie : bosse de +6 dB au-dessus du plus fort des deux → vue", hi > 4, f"[{lo:.2f} ; {hi:.2f}]")
 verifie("crête en dBFS", abs(M.crete_dbfs(np.full((10, 2), 0.5, np.float32)) + 6.02) < 0.01)
 
 # 7. Courbes

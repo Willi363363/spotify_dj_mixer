@@ -71,6 +71,50 @@ def grid_fit(x, marks, max_ms=120):
     return float(lags[k] / SR * 1000), float(score[k] / (np.abs(score).mean() + 1e-9))
 
 
+PHASE_NETTETE_MIN = 3.5  # phase d'attaques fiable si netteté ≥ 3,5 (bruit : 1,9 à 4,7 ; batterie : 5,5 à 10)…
+PHASE_ACCORD_MIN = 0.6   # … et accord ≥ 0,6 (bruit, nappe : ≤ 0,53 ; batterie, même syncopée : 0,7 à 1)
+
+
+def phase_attaques(x, marks, max_ms=120, ignore_avant=None):
+    """Phase des attaques de x sur les temps `marks` (échantillons dans x), cherchée à ±max_ms comme grid_fit.
+    Rend (décalage en échantillons, netteté, accord) :
+    - netteté : score du meilleur décalage sur la moyenne des |scores| (celle de grid_fit) ;
+    - accord : part des temps dont l'attaque la plus forte à ±max_ms tombe à ±15 ms du décalage retenu.
+      Une batterie, même syncopée, met la plupart de ses attaques sur les temps (0,7 à 1) ; un bruit, une nappe
+      n'en mettent qu'au hasard (≤ 0,5 sur 8 temps, ≤ 0,53 sur 16). La netteté seule ne suffit pas : un bruit
+      modulé atteint 4,7 (QA de l'essai 13 : 1,9 à 3,0 en direct, contre 5,5 à 8 avec batterie).
+    `ignore_avant` (échantillon) : le flux avant lui (et les trames de 1024 qui le chevauchent) n'entre pas dans la
+    mesure : une entrée en marche (silence → son, début d'un morceau) n'est pas une attaque."""
+    h, r = int(0.005 * SR), int(max_ms / 1000 * SR)
+    env = _flux(x, h)
+    garde = np.ones(len(env), bool)
+    if ignore_avant is not None:
+        garde[:min(len(env), max(0, int(ignore_avant)) // h + 2)] = False
+        if garde.sum() < 8:
+            return 0, 0.0, 0.0
+        v = env[garde]
+        env = np.where(garde, (env - v.mean()) / (v.std() + 1e-9), 0.0)
+    pos = (np.asarray(marks) / h).astype(int)
+    lags = np.arange(-r, r + 1, h)
+    score = np.array([env[np.clip(pos + lag // h, 0, len(env) - 1)].sum() for lag in lags])
+    k = int(np.argmax(score))
+    nettete = float(score[k] / (np.abs(score).mean() + 1e-9))
+    rh, tol = r // h, int(0.015 * SR) // h
+    vus = d_accord = 0
+    for q in pos:
+        if q - rh < 0 or q + rh >= len(env) or not garde[q - rh:q + rh + 1].all():
+            continue
+        vus += 1
+        d_accord += abs(int(np.argmax(env[q - rh:q + rh + 1])) - rh - lags[k] // h) <= tol
+    return int(lags[k]), nettete, (d_accord / vus if vus >= 2 else 0.0)
+
+
+def phase_fiable(nettete, accord):
+    """La phase d'attaques mesurée est-elle fiable (attaques nettes sur les temps) ? Sinon : temps estimés gardés,
+    ou mesure « non mesurable »."""
+    return nettete >= PHASE_NETTETE_MIN and accord >= PHASE_ACCORD_MIN
+
+
 def beat_phase(env, beat, h):
     """Phase des attaques dans le temps (échantillons depuis le début de `env`, enveloppe par pas de h) et
     netteté de la pulsation (pic du repli sur sa moyenne : ~1 sans pulsation, 2 à 5 pour une batterie)."""
@@ -89,10 +133,29 @@ def nettete_pulsation(m, debut, fin, beat):
     return beat_phase(O.kick_env(m.read(debut, fin)), beat, int(0.005 * SR))[1]
 
 
+def grille_temps(beats, ancre, avant, apres, pas, apres_min):
+    """Temps (échantillons absolus) autour de `ancre` : les `avant` temps qui la précèdent, puis elle et jusqu'à
+    `apres` − 1 suivants. Espacement pris aux temps de Spotify recalés (`beats`) s'ils encadrent l'ancre (à un quart
+    de temps près) avec au moins `apres_min` temps depuis elle ; sinon grille uniforme de pas `pas`, `apres_min` temps.
+    Sert à R1 (superposees) et à caler_superposition (C5 à C8). Essai direct 13 bis (g07) : la mesure d'entrée de B
+    durait 1,537 s chez Spotify, ses temps 375 ms, pas 384 : une grille uniforme dérivait de 9 ms par temps et posait
+    le 1 final de B 34 ms trop tard."""
+    if beats is not None and len(beats) >= 2:
+        b = np.asarray(beats, np.float64)
+        j = int(np.argmin(np.abs(b - ancre)))
+        k = min(apres, len(b) - j)
+        if abs(b[j] - ancre) <= pas / 4 and j >= avant and k >= apres_min:
+            return ancre + b[j - avant:j + k] - b[j]
+    return ancre + np.arange(-avant, apres_min) * float(pas)
+
+
 def caler_superposition(m, p, T, *, ecart_max=0.06, log=None):
     """Superpose les T dernières mesures de A (avant p.fin_a) et les T premières de B (depuis p.debut_b) sur une
     grille commune dont le tempo glisse temps par temps de celui de A vers celui de B (stretch_map), puis mesure le
     calage sur le son produit (grid_fit) et corrige B une fois si l'écart dépasse 10 ms.
+    Temps de A et de B : ceux de Spotify recalés (`grille_temps`), qui suivent le jeu réel, uniformes (mesure / 4) à
+    défaut ; chaque temps réel est posé sur un repère de la grille commune (QA de l'essai 13 : avec des temps
+    uniformes, des temps réels inégaux de 2-3 % décalaient B de plus de 20 ms, et C5 se repliait sur R1).
     Rend un dict : a, b (L échantillons, avant EQ et gain), dst (N + 1 repères), a0, b0, b_fin (fin de B lue dans
     la mémoire), calage_ms, nettete, d1, d2. Lève Refus : tempos trop éloignés, pulsation de B introuvable,
     calage > 20 ms après correction, netteté < 1,5."""
@@ -102,14 +165,21 @@ def caler_superposition(m, p, T, *, ecart_max=0.06, log=None):
     if abs(rr - 1) > ecart_max:
         raise Refus(f"tempos trop éloignés ({abs(rr - 1) * 100:.1f} % > {ecart_max * 100:.0f} %)")
     N = 4 * T
-    etire = abs(rr - 1) > 0.005
+    meme_pulsation = abs(d2 - p.bar_b / 4) <= 1     # tempo double ou moitié : temps de B uniformes
+    ta = grille_temps(p.beats_a, p.fin_a, N, 1, d1, 1)
+    tb = grille_temps(p.beats_b if meme_pulsation else None, p.debut_b, 0, N + 1, d2, N + 1) - p.debut_b
+    d1, d2 = (ta[-1] - ta[0]) / N, (tb[-1] - tb[0]) / N   # temps moyens réels
+    etire = abs(d2 / d1 - 1) > 0.005
     if etire:
         dout = np.array([((N - n) / N) * d1 + (n / N) * d2 for n in range(N)])
     else:
-        d2, dout = d1, np.full(N, d1)
+        dout = np.full(N, d1)
     dst = np.concatenate([[0], np.cumsum(dout)]).round()
     L = int(dst[-1])
-    a0 = int(round(p.fin_a - N * d1))
+    a0 = int(round(ta[0]))
+    src_a = ta - a0
+    etire_a = etire or np.abs(src_a - dst).max() > 0.001 * SR
+    etire_b = etire or np.abs(tb - dst).max() > 0.001 * SR
     b0 = int(p.debut_b)
     if p.beats_b is None:  # sans grille de Spotify : B posé sur la phase de ses attaques (ancien mélange)
         h, half, wb = int(0.005 * SR), int(d2 / 2), int(8 * d2)
@@ -122,13 +192,14 @@ def caler_superposition(m, p, T, *, ecart_max=0.06, log=None):
         b_new = int(round(grid0 + round((b0 - grid0) / d2) * d2))
         b0 = max(p.debut_b, b_new)
     a_src = m.read(a0, p.fin_a)
+    nb_ = int(round(tb[-1]))
 
     def rendre_b(b0):
-        m.wait(b0 + int(round(N * d2)) + SR)
-        src = m.read(b0, b0 + int(round(N * d2)))
-        return O.fit(O.stretch_map(src, np.arange(N + 1) * d2, dst), L) if etire else O.fit(src, L)
+        m.wait(b0 + nb_ + SR)
+        src = m.read(b0, b0 + nb_)
+        return O.fit(O.stretch_map(src, np.round(tb), dst), L) if etire_b else O.fit(src, L)
 
-    a = O.fit(O.stretch_map(a_src, np.arange(N + 1) * d1, dst), L) if etire else O.fit(a_src, L)
+    a = O.fit(O.stretch_map(a_src, np.round(src_a), dst), L) if etire_a else O.fit(a_src, L)
     b = rendre_b(b0)
     ea, sa = grid_fit(a, dst[:-1])
     eb, sb = grid_fit(b, dst[:-1])
@@ -143,5 +214,5 @@ def caler_superposition(m, p, T, *, ecart_max=0.06, log=None):
         raise Refus(f"netteté {nettete:.2f} < {NETTETE_MIN}")
     if abs(eb - ea) > CALAGE_MAX_MS:
         raise Refus(f"calage {eb - ea:+.0f} ms > {CALAGE_MAX_MS:.0f} ms après correction")
-    return {"a": a, "b": b, "dst": dst, "a0": a0, "b0": b0, "b_fin": b0 + int(round(N * d2)),
-            "calage_ms": float(eb - ea), "nettete": float(nettete), "d1": d1, "d2": d2, "etire": etire}
+    return {"a": a, "b": b, "dst": dst, "a0": a0, "b0": b0, "b_fin": b0 + nb_,
+            "calage_ms": float(eb - ea), "nettete": float(nettete), "d1": d1, "d2": d2, "etire": etire_b}
