@@ -27,6 +27,10 @@ Le moteur ne choisit rien : l'extension ([`../../spicetify/`](../../spicetify/RE
 
 ## Lancer
 
+**Automatique** : `outils/installer-maquette-auto.sh` une fois ; ensuite la maquette démarre à chaque ouverture de Spotify (avance 60 s, `DJ_WORK=~/spotify_dj_mixer-travail`) et s'arrête à sa fermeture. Journal : `journalctl --user -u dj-maquette -f` ; sorties de `e2.py` et `espion.mjs` dans `$XDG_RUNTIME_DIR/dj-maquette/`. Retirer : `outils/installer-maquette-auto.sh --retirer`.
+
+**À la main** :
+
 ```bash
 pactl load-module module-null-sink sink_name=dj_in        # note le numéro renvoyé
 DJ_WORK=/tmp/essai python3 -I -u proto/e2/e2.py 60 &    # 60 s d'avance ; DJ_WORK active /run et les boutons
