@@ -9,9 +9,11 @@
 (function (racine) {
   const MAQUETTE = 'http://127.0.0.1:47802';
   const KEY = 'dj-mixer:auto';
-  // ms : le saut par play se produit ~90 ms après l'ordre (e2.py, SWITCH_S). Avec 30 ms d'avance, il tombe ~60 ms
-  // après le premier temps de la mesure de sortie : le moteur recale la fin de A de quelques ms en arrière.
-  const LEAD = 30;
+  // ms : ordre de saut donné quand la position annoncée dépasse la sortie de −LEAD ms ; le saut se produit ~90 ms
+  // plus tard (e2.py, SWITCH_S), donc ~150 ms après le 1 de sortie. Le 1 de A est ainsi dans la mémoire du moteur,
+  // qui le cherche avant la fin estimée de A (e2.py, A_AVANT_S). Essai direct 13 : l'instant du saut varie de ±100 ms
+  // d'un essai à l'autre ; avec LEAD = +30 il tombait parfois sur le 1 ou juste avant.
+  const LEAD = -60;
   const MARGIN_S = 15;      // une sortie trop proche de maintenant n'est pas prévue
   const AVANT_SAUT_MS = 1500;
   // Genre : l'API des genres n'est pas joignable depuis l'extension. On garde les morceaux dont un artiste figure
@@ -185,12 +187,15 @@
       if (!item?.uri?.startsWith('spotify:track:')) { status.text = 'En attente d\'un morceau.'; return; }
       played.add(item.uri);
       await loadPool();
-      if (pool.items.length && status.next?.forUri !== item.uri) {
+      // Album joué dans l'ordre (cas 16) : B est la piste suivante de l'album, jamais un morceau de la réserve d'une
+      // playlist écoutée avant (essai direct 13 : le mode auto quittait l'album)
+      const album = contexteLecture() === 'album';
+      if (!album && pool.items.length && status.next?.forUri !== item.uri) {
         status.next = { forUri: item.uri, pick: null };
         status.text = 'Recherche du morceau suivant le plus compatible…';
         status.next.pick = await chooseNext(item.uri, item.artists?.[0]?.name);
       }
-      const Bt = status.next?.forUri === item.uri && status.next.pick ? status.next.pick.track : nextTrack();
+      const Bt = !album && status.next?.forUri === item.uri && status.next.pick ? status.next.pick.track : nextTrack();
       const p = status.plan;
       if (p && (p.forUri !== item.uri || (!p.done && Bt && p.B.uri !== Bt.uri))) status.plan = null;  // morceau ou file changés
       if (maintenant() - lastCheck > 5000) { lastCheck = maintenant(); await readState(); }

@@ -72,7 +72,7 @@ la main. Le forçage d'une transition passe par les identifiants v2 (`/run` et `
 | `b.entree` | type d'entrée (§5.6) | `E0`, `E1`, `E2` |
 | `b.cible_s` | entreeB + T mesures (début de section visé) ; = `entree_s` si T = 0 | ≥ `entree_s` |
 | `*.bar_s` | durée médiane d'une mesure au bord | 0,3 à 5 |
-| `*.beats` | temps de Spotify (s) **relatifs** au point (sortieA pour A, entreeB pour B). A couvre [−T − 1 ; +1] mesures, B [−1 ; T + 2] | 8 à 120 valeurs dans ]−60 ; 60[, ou `[]` (pas de grille) |
+| `*.beats` | temps de Spotify (s) **relatifs** au point (sortieA pour A, entreeB pour B). A couvre [−T − 2 ; 0] mesures (rien après la sortie : la mémoire y contient B ; essai direct 13), B [−1 ; T + 2] | 8 à 120 valeurs dans ]−60 ; 60[, ou `[]` (pas de grille) |
 | `*.grille` | confiance de grille au bord (§5.2) | `nette`, `moyenne`, `floue` |
 | `a.voix` / `b.voix` | voix par mesure, A : les 16 mesures **avant** sortieA (la dernière en dernier) ; B : les 16 **après** entreeB | ≤ 16 valeurs dans [0 ; 1] |
 | `voix_source` | d'où viennent ces valeurs (ADR 0002) | `paroles`, `segments`, `aucune` |

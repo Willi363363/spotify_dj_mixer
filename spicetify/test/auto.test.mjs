@@ -13,15 +13,15 @@ const { creer } = require('../dj-auto.js');
 const { bibliotheque, morceau } = require('./fixtures/bibliotheque.js');
 
 // Faux Spotify : horloge virtuelle, lecture d'une file de morceaux, saut par PlayerAPI.play({ seekTo })
-function monde(pistes, { avance = () => 60, contexte = 'spotify:playlist:37i9dQZF1DX0000000000000' } = {}) {
-  const parUri = new Map(pistes.map((p) => [p.uri, p]));
+function monde(pistes, { avance = () => 60, contexte = 'spotify:playlist:37i9dQZF1DX0000000000000', reserve = null } = {}) {
+  const parUri = new Map([...pistes, ...(reserve ?? [])].map((p) => [p.uri, p]));
   let horloge = 1_800_000_000_000;
-  const lecture = { uri: pistes[0].uri, debut: horloge, pos0: 0 };
+  const lecture = { uri: pistes[0].uri, debut: horloge, pos0: 0, contexte };
   const file = [...pistes.slice(1)];
   const ordres = [], sauts = [];
   const store = { 'dj-mixer:auto': '1' };
   let auditeur = null;
-  const data = () => ({ item: { uri: lecture.uri, name: lecture.uri.slice(-6) }, isPaused: false, context: { uri: contexte } });
+  const data = () => ({ item: { uri: lecture.uri, name: lecture.uri.slice(-6) }, isPaused: false, context: { uri: lecture.contexte } });
   const S = {
     Player: {
       get data() { return data(); },
@@ -29,14 +29,16 @@ function monde(pistes, { avance = () => 60, contexte = 'spotify:playlist:37i9dQZ
       getShuffle: () => false,
       addEventListener: (e, f) => { auditeur = f; },
     },
-    Platform: { PlayerAPI: { play: async (quoi, _o, { seekTo }) => {
-      sauts.push({ de: lecture.uri, vers: quoi.uri, seekTo, a: S.Player.getProgress() });
-      Object.assign(lecture, { uri: quoi.uri, debut: horloge, pos0: seekTo });
+    Platform: { PlayerAPI: { play: async (quoi, _o, { seekTo, skipTo }) => {
+      const vers = skipTo?.uri ?? quoi.uri;
+      sauts.push({ de: lecture.uri, vers, contexte: quoi.uri, seekTo, a: S.Player.getProgress() });
+      Object.assign(lecture, { uri: vers, debut: horloge, pos0: seekTo, contexte: skipTo ? quoi.uri : vers });
       file.shift();
-    } } },
+    } },
+    PlaylistAPI: reserve ? { getContents: async () => ({ items: reserve.map((p) => ({ uri: p.uri, name: p.uri.slice(-6), artists: [{ name: 'x' }] })) }) } : undefined },
     getAudioData: async (uri) => parUri.get(uri),
     LocalStorage: { get: (k) => store[k] ?? null, set: (k, v) => { store[k] = v; } },
-    get Queue() { return { nextTracks: file.map((p) => ({ contextTrack: { uri: p.uri, metadata: { title: p.uri.slice(-6) } } })) }; },
+    get Queue() { return { nextTracks: file.map((p, i) => ({ contextTrack: { uri: p.uri, uid: `uid${i}${p.uri.slice(-4)}`, metadata: { title: p.uri.slice(-6) } } })) }; },
   };
   const fetch = async (url, o = {}) => {
     if (url.endsWith('/state')) return { ok: true, json: async () => ({ delay_s: avance(ordres.length), target_s: 60, busy: false }) };
@@ -45,7 +47,7 @@ function monde(pistes, { avance = () => 60, contexte = 'spotify:playlist:37i9dQZ
   };
   const inst = creer({ Spicetify: S, fetch, DJCore, maintenant: () => horloge, sleep: async (ms) => { horloge += ms; } });
   return {
-    inst, ordres, sauts, store, lecture,
+    inst, ordres, sauts, store, lecture, file,
     avancer: (ms) => { horloge += ms; },
     // Joue jusqu'à n ordres (ou fin de la file), tick toutes les 250 ms, saut de 5 s quand rien n'est imminent
     async jouer(n) {
@@ -82,10 +84,13 @@ test('mode auto : 20 ordres v2 valides, variété, garde-fou O1, quota refrain',
   for (let i = 2; i < m.ordres.length; i++) {
     assert.ok(m.ordres.slice(i - 2, i + 1).filter((o) => o.b.entree === 'E2').length <= 1, 'E2 au plus 1 sur 3');
   }
-  // le saut tombe sur la sortie prévue (à LEAD près) et vise entreeB
+  // le saut tombe juste après le 1 de sortie (−LEAD ms, essai direct 13 : jamais avant) et vise entreeB
+  const { LEAD } = require('../dj-auto.js');
+  assert.ok(LEAD < 0, `LEAD ${LEAD}`);
   for (const [i, s] of m.sauts.entries()) {
     const o = m.ordres[i];
-    assert.ok(Math.abs(s.a - o.a.sortie_s * 1000) <= 40, `saut à ${s.a} pour ${o.a.sortie_s}`);
+    const ecart = s.a - o.a.sortie_s * 1000;
+    assert.ok(ecart >= -LEAD && ecart <= -LEAD + 40, `saut à ${s.a} pour ${o.a.sortie_s}`);
     assert.equal(s.seekTo, Math.round(o.b.entree_s * 1000));
   }
   assert.ok(new Set(ids).size >= 4, ids.join(' '));
@@ -135,6 +140,20 @@ test('album dans l\'ordre : R2 (A jusqu\'à sa fin) ; rattrapage après un chang
   assert.equal(o.transition, 'R1');
   assert.equal(o.manuel, true);
   assert.deepEqual(DJCore.choix.valider(o), []);
+});
+
+test('album après une playlist : R2 vers la piste suivante de l\'album, sans sortir de l\'album (cas 16, essai direct 13)', async () => {
+  const album = bibliotheque(4, 51), reserve = bibliotheque(30, 52);
+  const m = monde(album, { reserve });
+  await m.inst.tick();                       // contexte playlist : la réserve se charge, un suivant est choisi
+  assert.ok(m.inst.status.next?.pick, 'suivant choisi dans la réserve de la playlist');
+  m.lecture.contexte = 'spotify:album:4beTtJKeg3ITJsiVuxkiV0';   // l'utilisateur lance un album
+  m.inst.status.plan = null;
+  await m.jouer(1);
+  const o = m.ordres[0];
+  assert.equal(o.transition, 'R2', o.raison);
+  assert.equal(o.b.uri, album[1].uri, 'B = piste suivante de l\'album');
+  assert.equal(m.sauts[0].contexte, 'spotify:album:4beTtJKeg3ITJsiVuxkiV0', 'saut dans le contexte de l\'album');
 });
 
 test('planTransition lit l\'avance du moteur même mode auto éteint, et rend visible un repli au plan', async () => {

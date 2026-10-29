@@ -41,7 +41,8 @@ Une fois par morceau : refus d'office (album dans l'ordre, analyse absente → R
 | `DJ.planTransition(A, B, {force, graine, contexte, historique})` | Plan complet à blanc : transition, points, raison, refus de chaque autre transition |
 | `DJ.forcer('C4')` | Force la transition suivante du mode automatique |
 | `DJ.ordre(choix, {t_wall, id})` | Construit l'ordre v2 ; utilisé par `proto/e2/transition.js` |
-| `DJ.switchAt`, `DJ.sendOrder`, `DJ.status`, `DJ.setAuto` | Saut sur le temps, envoi au moteur, état, interrupteur |
+| `DJ.switchAt`, `DJ.sendOrder`, `DJ.setAuto(bool)` | Saut 60 ms après la sortie (`DJ.LEAD = −60`), envoi au moteur, interrupteur |
+| `DJ.status` | Objet (pas une fonction) : `text`, `plan`, `historique`, `log`, `force` |
 
 ## Page « Mode DJ »
 

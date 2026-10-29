@@ -285,5 +285,34 @@ for ident, bpm_b, attendu in (("C6", 124, ("C6", "jouee")), ("C5", 140, ("secour
     else:
         verifie("secours : replis au rendu dans le rapport", [x["de"] for x in rap["replis"]] == ["C5"])
 
+# ─── Placement réel (essai direct 13) : Spotify saute après le 1 de sortie (LEAD < 0), sans silence ───────
+# A joue encore 60 à 300 ms après son 1, puis B commence par une attaque forte. Le moteur doit poser la fin de A sur
+# ce 1 : ni une mesure plus tôt (défaut vu en direct), ni sur une attaque de B. Ordres v2 actuels (temps de A
+# jusqu'à la sortie) et anciens (une mesure de temps après la sortie, tombant dans B).
+a_long = S.track(120, 50.0, 220, basse=True, seed=1, riche=True)   # 25 mesures : le 1 de sortie à 48 s
+b_son = S.track(126, 30.0, 330, basse=True, seed=2, riche=True)
+un = 48 * SR
+for apres_ms in (30, 60, 150, 230, 300):   # 30 ms : le 1 tombe entre la fin estimée de A et le début estimé de B
+    for ancien in (False, True):
+        buf = np.concatenate([a_long[:un + int(apres_ms / 1000 * SR)], b_son])
+        e2.buf[:] = 0
+        e2.buf[:len(buf)] = buf
+        e2.written = len(buf)
+        saut = un + int(apres_ms / 1000 * SR)
+        t = time.time() * 1000
+        idx = saut - int(e2.SWITCH_S * SR)        # l'ordre part SWITCH_S avant le changement dans le flux
+        with e2.clock_lock:
+            e2.clock[:] = [(t - idx / SR * 1000, 0), (t + (len(buf) - idx) / SR * 1000, len(buf))]
+        d = S.ordre_dict("C1", t_wall=t, gapless=True, bpm_a=120, bpm_b=126)
+        if not ancien:
+            d["a"]["beats"] = [round(-2 + k * 0.5, 4) for k in range(5)] + [round(-4 + k * 0.5, 4) for k in range(4)]
+            d["a"]["beats"].sort()
+        o = valider_ordre(d)
+        fin_a, debut_b, ahead = e2.find_switch(o)
+        pl = e2.placer(o, fin_a, debut_b, ahead)
+        err = (pl.fin_a - un) / SR * 1000
+        verifie(f"placement : saut {apres_ms} ms après le 1 ({'ancien ordre' if ancien else 'ordre v2'}) → fin de A sur ce 1 "
+                f"(±15 ms)", abs(err) <= 15, f"{err:+.0f} ms")
+
 print("RÉSULTAT :", "tout passe" if ok else "ÉCHEC")
 sys.exit(0 if ok else 1)

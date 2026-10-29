@@ -43,6 +43,11 @@ test('ordres v2 valides sur 60 transitions factices (bornes de l\'ADR 0001)', ()
     if (o.transition !== 'R2') assert.ok(o.a.jamais_entendu_s <= 30 || p.sortie(o.bars)?.repli, `O1 ${o.a.jamais_entendu_s}`);
     assert.ok(o.a.sortie_s <= o.a.duree_s);
     assert.ok(o.b.cible_s >= o.b.entree_s);
+    // temps de A : rien après la sortie (la mémoire du moteur y contient B), T + 2 mesures avant (essai direct 13)
+    if (o.a.beats.length) {
+      assert.ok(Math.max(...o.a.beats) <= 0.05, `temps de A après la sortie : ${Math.max(...o.a.beats)}`);
+      assert.ok(Math.min(...o.a.beats) <= -(o.bars + 1.5) * o.a.bar_s, `temps de A : ${Math.min(...o.a.beats)}`);
+    }
   }
 });
 
@@ -97,6 +102,19 @@ test('grille floue : ni superposition ni effet', () => {
   const a = morceau('rap', 7, { confiance: 0.1 }), b = morceau('rap', 8, { confiance: 0.1 });
   const ch = C.choisir(PL.paire(a, b, { avance_s: 90 }), [], { rng: C.rng(2) });
   assert.ok(!['C1', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8'].includes(ch.transition), ch.transition);
+});
+
+test('repli au plan : C2 garde une grille de B floue (seule la grille de A compte, cas 11 ; essai direct 13)', () => {
+  const a = morceau('rap', 9, { confiance: 0.8 }), b = morceau('rap', 10, { confiance: 0.1 });
+  const p = PL.paire(a, b, { avance_s: 60 });
+  const ch = C.choisir(p, [], { force: 'C2' });
+  assert.equal(ch.transition, 'C2', ch.raison);
+  assert.equal(ch.points.bords.grilleB, 'floue');
+  assert.notEqual(ch.points.bords.grilleA, 'floue');
+  const r = C.replierAuPlan(ch, { avance_s: 60 });
+  assert.equal(r.transition, 'C2', r.replis_plan.map((x) => `${x.de}→${x.vers} ${x.raison}`).join(' ; '));
+  // grille de A floue à la revérification : C2 ne tient plus
+  assert.notEqual(C.replierAuPlan(ch, { avance_s: 60, grille: { a: 'floue', b: 'floue' } }).transition, 'C2');
 });
 
 test('C7 : deux bords instrumentaux, même tonalité, tempos proches ; 16 mesures si possible', () => {

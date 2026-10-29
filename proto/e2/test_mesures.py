@@ -10,7 +10,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import synthese as S  # noqa: E402
 from transitions import mesures as M  # noqa: E402
-from transitions.contrat import Automation  # noqa: E402
+from transitions.contrat import Automation, Place, Rendu  # noqa: E402
 from transitions.outils import CH, SR  # noqa: E402
 
 ok = True
@@ -76,6 +76,27 @@ pos = 5 * SR + beat // 3  # hors attaque
 x[pos:] += 0.3
 verifie("clics : marche de 0,3 vue", M.clics(x, [pos], beat=beat) == [pos])
 verifie("clics : borne propre (même sur une attaque) ignorée", M.clics(a, [5 * SR, pos, 0, L - 1], beat=beat) == [])
+# Raccords d'un rendu réel (essai direct 13) : un segment coupé en pleine note n'a pas de clic à ses bouts ;
+# sans le flux, rapport(complet=True) ne les juge pas ; avec le flux, un vrai clic au raccord est vu.
+c0 = 3 * SR + int(0.15 * SR)
+c0 += int(np.argmax(np.abs(a[c0:c0 + int(0.05 * SR), 0])))
+c1 = 6 * SR + int(0.15 * SR)
+c1 += int(np.argmax(np.abs(a[c1:c1 + int(0.05 * SR), 0])))
+k = SR // 10
+seg = a[c0:c1].copy()
+rr = Rendu(debut=c0, seg=seg, reprise=c1, gain=1.0, transition="C1", pistes={}, reperes=np.array([]),
+           uns=np.array([]), automations=[], infos={"bornes": [0, beat, len(seg)]})
+pl = Place(fin_a=c1, debut_b=c1, bar_a=4 * beat, bar_b=4 * beat, beats_a=None, beats_b=None, nettete_a=3.0,
+           nettete_b=3.0)
+r0 = M.rapport(rr, pl, complet=True)
+r1 = M.rapport(rr, pl, complet=True, avant=a[c0 - k:c0], apres=a[c1:c1 + k])
+saut = a[c1:c1 + k].copy()
+saut += 0.3
+r2 = M.rapport(rr, pl, complet=True, avant=a[c0 - k:c0], apres=saut)
+verifie("rapport : segment coupé en pleine note, sans flux → pas de faux clic aux bouts", r0["clics"] == [],
+        f"{r0['clics']}, amplitude aux bouts {float(np.abs(seg[0]).max()):.2f} / {float(np.abs(seg[-1]).max()):.2f}")
+verifie("rapport : avec le flux, raccords propres → pas de clic", r1["clics"] == [], str(r1["clics"]))
+verifie("rapport : avec le flux, marche de 0,3 au raccord de fin → vue", r2["clics"] == [len(seg)], str(r2["clics"]))
 
 # 6. Niveau et crête
 lo, hi = M.sonie(a, a[:4 * SR], b[-4 * SR:])

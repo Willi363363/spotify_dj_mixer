@@ -1,6 +1,6 @@
 # Tests
 
-Tests réalisés du **2026-10-23** au **2026-10-26** sur la machine de [`../environnement.md`](../environnement.md). Comment les rejouer : [`methode.md`](methode.md).
+Tests réalisés du **2026-10-23** au **2026-10-28** sur la machine de [`../environnement.md`](../environnement.md). Comment les rejouer : [`methode.md`](methode.md).
 
 | # | Test | Question | Verdict |
 |---|---|---|---|
@@ -13,6 +13,7 @@ Tests réalisés du **2026-10-23** au **2026-10-26** sur la machine de [`../envi
 | 07 | [Série B : effets](07-serie-b-effets.md) | Égaliseur, écho, clics des balayages | ✅ égaliseur et écho, ⚠️ clics |
 | 08 | [Série C : maquette E2](08-serie-c-maquette-e2.md) | Son retardé, mix avec échange des basses, calage du tempo, boucle, freinage | ✅ principe validé |
 | 10 | [Preuve du calage](10-calage.md) | Les temps de A et B tombent-ils ensemble pendant une superposition ? | ❌ ancien calage : ~½ temps d'erreur ; ✅ grille de Spotify + correction : **0 à 10 ms** sur 5 paires rap FR |
+| 13 | [Essai en direct des transitions v2](13-essai-direct-v2.md) | Le catalogue v2 tient-il sur de vrais morceaux, dans Spotify ? | ✅ 10 transitions jouées, son fidèle au rendu, aucun trou ni clic du moteur ; 4 défauts corrigés ; ⚠️ voix (V2, V3) et O5 ; **pas écouté** |
 
 ## Règle
 

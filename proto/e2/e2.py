@@ -60,6 +60,8 @@ URI = re.compile(r"^spotify:track:[A-Za-z0-9]{22}$")
 LAT = 0.2            # latence de pacat (s) : délai entre l'écriture d'un bloc et le moment où on l'entend
 GAIN_S = 16          # durée du retour du gain de B à 1 après une transition
 SWITCH_S = 0.09      # délai entre l'ordre de saut et le changement dans le flux (mesuré, saut dans la playlist)
+A_AVANT_S = 0.32     # le 1 de sortie de A est cherché jusqu'à 320 ms avant la fin estimée de A (LEAD = −60 ms)…
+A_APRES_S = 0.03     # … et jusqu'à 30 ms après
 SLOW = _slow(os.environ.get("DJ_SLOW", "1.03"))
 BLOCK = 1024
 MAX_CORPS = 65536    # corps JSON d'un POST (ordre v2 avec 2 × 120 temps : ~5 Ko), au-delà : 400
@@ -562,7 +564,9 @@ def find_switch(o):
         log("changement à la main sans silence : fin de A au début de la fenêtre d'espion")
         return a, est, 0
     log("changement sans silence : placé à l'heure de l'ordre")
-    return est - int(0.04 * SR), est - int(0.02 * SR), 0
+    # A est valable jusqu'au début estimé de B : marge de 20 ms pour son 1 (essai direct 13 : à 0, un 1 trouvé 4 ms
+    # après la fin estimée de A faisait reculer d'une mesure)
+    return est - int(0.04 * SR), est - int(0.02 * SR), int(0.02 * SR)
 
 
 def placer(o, end_a, start_b, ahead):
@@ -575,8 +579,16 @@ def placer(o, end_a, start_b, ahead):
     beats_a = beats_b = None
     na = nb = 0.0
     shift, how = 0, "grosses caisses"
-    if o.a.beats:
-        lag, st = K.grid_lag(Memoire, end_a, o.a.beats)
+    beats_av = [t for t in o.a.beats if t <= 0.05]  # après la sortie, la mémoire contient B : on l'ignore
+    if len(beats_av) >= 4:
+        # Le 1 de sortie est avant le saut (dj-auto saute après lui, LEAD < 0) : recherche dans
+        # [end_a − A_AVANT_S ; end_a + A_APRES_S], fenêtre plus courte qu'un temps (sinon deux temps y tiennent).
+        # Essai direct 13 : à ±150 ms autour de end_a, avec les temps d'après la sortie calés sur les attaques de B,
+        # le moteur reculait d'une mesure entière dans 10 essais sur 23.
+        av = min(A_AVANT_S, 0.85 * o.a.bar_s / 4 - A_APRES_S)
+        mi = (av - A_APRES_S) / 2
+        lag, st = K.grid_lag(Memoire, end_a - int(mi * SR), beats_av, max_ms=(av + A_APRES_S) / 2 * 1000)
+        lag -= int(mi * SR)
         if st >= K.NETTETE_MIN:
             lag_a = lag if lag <= ahead else lag - bar_a  # premier temps au-delà du raccord : la mesure d'avant
             beats_a = np.round(end_a + lag + np.asarray(o.a.beats) * SR).astype(np.int64)

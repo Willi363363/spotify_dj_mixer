@@ -369,7 +369,8 @@
         if (P.avance_s < need) return `avance ${fr(P.avance_s, 0)} s < ${fr(need, 0)} s requises (${pts.T} mesures)`;
       }
       const ga = grille?.a ?? pts.bords.grilleA, gb = grille?.b ?? pts.bords.grilleB;
-      if ((ga === 'floue' || gb === 'floue') && id !== 'R1') return 'grille floue';
+      // même règle qu'à l'éligibilité : C2 n'a besoin que de la grille de A (écho calé sur A), R1 d'aucune
+      if (id !== 'R1' && (ga === 'floue' || (gb === 'floue' && id !== 'C2'))) return 'grille floue';
       return true;
     };
     let id = choix.transition, pts = choix.points;
@@ -441,7 +442,8 @@
       a: {
         uri: paire.a.uri, duree_s: r3(paire.a.duree_s),
         sortie_s: r3(s), sortie_mesure: pts.sortie.mesure,
-        bar_s: r3(barA), beats: grilleRel(a, s - (T + 1) * barA - 0.05, s + barA + 0.05, s, 'fin'),
+        // A : seulement les temps d'avant la sortie (après, la mémoire du moteur contient B : essai direct 13)
+        bar_s: r3(barA), beats: grilleRel(a, s - (T + 2) * barA - 0.05, s + 0.05, s, 'fin'),
         grille: pts.bords?.grilleA ?? 'floue', voix: (pts.bords?.voixA ?? []).map(r3).slice(-16),
         jamais_entendu_s: r3(pts.sortie.jamais_entendu_s ?? 0),
       },

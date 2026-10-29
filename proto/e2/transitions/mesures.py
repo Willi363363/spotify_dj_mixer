@@ -162,8 +162,11 @@ def courbes(automations, attendu, tol_db=1.0, tol_f=0.1, plancher_db=-40.0):
     return out
 
 
-def rapport(r, p, *, complet=False):
-    """Le dict `mesures` de l'ADR 0001 pour un rendu. `p` : la Place (durée d'un temps de A)."""
+def rapport(r, p, *, complet=False, avant=None, apres=None):
+    """Le dict `mesures` de l'ADR 0001 pour un rendu. `p` : la Place (durée d'un temps de A).
+    `avant`, `apres` : le flux juste avant le segment et juste après sa reprise (× gain de B), pour juger les clics
+    aux deux raccords. Sans eux, les bornes à moins de 50 ms d'un bout ne sont pas jugées : la médiane locale n'y voit
+    qu'un côté, et un segment réel qui finit sur un passage calme y montre un faux clic (essai direct 13)."""
     pa = r.pistes.get("a")
     pb = r.pistes.get("b")
     beat = p.bar_a / 4
@@ -181,5 +184,12 @@ def rapport(r, p, *, complet=False):
             out[k] = round(float(out[k]), 2)
     if complet:
         out["trous"] = trous(r.seg, r.infos.get("silences", ()))
-        out["clics"] = clics(r.seg, r.infos.get("bornes", ()), beat=beat)
+        bornes = [int(b) for b in r.infos.get("bornes", ())]
+        if avant is not None and apres is not None:
+            k = len(avant)
+            x = np.concatenate([avant, r.seg, apres]).astype(np.float32)
+            out["clics"] = [b - k for b in clics(x, [b + k for b in bornes], beat=beat)]
+        else:
+            bord = int(0.05 * SR)
+            out["clics"] = clics(r.seg, [b for b in bornes if bord <= b <= len(r.seg) - bord], beat=beat)
     return out

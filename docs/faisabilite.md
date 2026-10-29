@@ -16,7 +16,7 @@ Catalogue de tout ce qui a été envisagé. **E1** = prototype sans module audio
 | Réordonner les morceaux de la playlist | ❌ Seuls les morceaux ajoutés à la main sont modifiables | — | idem |
 | Bouton dans la barre de lecture, raccourci clavier | ✅ Testé | E1 | [06 A4](tests/06-serie-a-spotify.md#a4--interface-a4-interface-file-pubjs) |
 | Afficher tempo et tonalité | ✅ Testé (libellé du bouton) | E1 | idem |
-| Être prévenu d'une pub audio | ⚠️ API trouvée (`AdManagers.inStreamApi`), non observée en direct | E1 | [06 A6](tests/06-serie-a-spotify.md#a6--pubs) |
+| Être prévenu d'une pub audio | ⚠️ API trouvée (`AdManagers.inStreamApi`), non observée en direct (aucune pub non plus pendant l'essai 13, ~2 h) | E1 | [06 A6](tests/06-serie-a-spotify.md#a6--pubs) |
 
 ## Commandes du lecteur (Spotify)
 
@@ -48,10 +48,10 @@ Catalogue de tout ce qui a été envisagé. **E1** = prototype sans module audio
 | Caler les tempos sans changer la hauteur | ✅ Maquette (`rubberband`) ; utile sous ~6 % d'écart | E2 | idem |
 | Boucle sans silence depuis la mémoire | ✅ Mesuré : aucun silence | E2 | idem |
 | Effet « vinyle qui freine » | ✅ Maquette | E2 | idem |
-| Catalogue v2 (C1-C8, replis R1/R2), placement et choix automatiques | ✅ Tests hors ligne (synthèse, analyses factices) ; **à écouter** | E2 | [spec](specs/transitions-v2.md), [protocole](specs/protocole-ecoute.md) |
+| Catalogue v2 (C1-C8, replis R1/R2), placement et choix automatiques | ✅ Mesuré en direct dans Spotify (10 transitions, 16 paires, mode auto réel) ; **pas écouté** ; C7 seulement forcée (jamais éligible), voix V2/V3 peu fiables | E2 | [13](tests/13-essai-direct-v2.md), [spec](specs/transitions-v2.md), [protocole](specs/protocole-ecoute.md) |
 | Scratch sur le son déjà passé | Supposé, même mécanisme que le freinage | E2 | — |
 
-**Écoute** : aucune transition v2 n'a encore été jugée à l'oreille ; le protocole est dans [`specs/protocole-ecoute.md`](specs/protocole-ecoute.md). Transitions de DJ et ce qui est faisable chez nous : [`recherche/methodes-dj.md`](recherche/methodes-dj.md).
+**Écoute** : aucune transition v2 n'a encore été jugée à l'oreille (essai 13 : mesures sur le son réel, extraits enregistrés pour l'écoute à l'aveugle) ; le protocole est dans [`specs/protocole-ecoute.md`](specs/protocole-ecoute.md). Transitions de DJ et ce qui est faisable chez nous : [`recherche/methodes-dj.md`](recherche/methodes-dj.md).
 
 ## Impossible
 
