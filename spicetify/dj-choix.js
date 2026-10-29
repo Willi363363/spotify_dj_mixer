@@ -100,7 +100,14 @@
     return true;
   };
   const tous = (...c) => c.find((x) => x !== true) ?? true;
-  const sansVoixFin = (pts) => (pts.sortie.vocale ? 'voix de A sur la dernière mesure' : true);
+  // C1, C3 : refus seulement si la coupe tombe au milieu d'une ligne de paroles (avec paroles) ou, sans paroles, si la
+  // dernière mesure de A est vocale (revalidation en direct du 2026-10-29 : en rap A chante jusqu'au bout, la coupe
+  // de DJ se fait en fin de ligne)
+  const sansVoixFin = (pts) => {
+    const s = pts.sortie;
+    if (!(s.coupe ?? s.vocale)) return true;
+    return s.parParoles ? 'ligne de paroles de A coupée à la sortie' : 'voix de A sur la dernière mesure';
+  };
 
   // ── Règles par transition (§4, §7, §8) ────────────────────────────────────────────────────────────
   // points(paire, ctx) → pts | { raison } ; eligible(paire, pts, ctx) → true | raison du refus
@@ -204,7 +211,7 @@
         const fin = Math.min(PL().finEffective(a) || paire.a.duree_s, paire.a.duree_s - R2_MARGE_S);
         const ia = Math.max(0, (a?.bars?.length ?? 0) - 1);
         const s = { t: +fin.toFixed(3), mesure: a?.bars?.length ? PL().indexMesure(a, fin - 0.1) : null,
-          jamais_entendu_s: 0, voixFin: 0, vocale: false, repli: false };
+          jamais_entendu_s: 0, voixFin: 0, vocale: false, coupe: false, repli: false };
         if (s.mesure !== null) s.mesure = Math.min(s.mesure, ia);
         const e = paire.entrees(0).E0 ?? { t: 0, mesure: 0, cible_s: 0, cible_mesure: 0, saute_s: 0, part: 0 };
         const bords = paire.bords(s, e, 0);

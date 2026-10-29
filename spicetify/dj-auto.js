@@ -68,12 +68,17 @@
     // ── Plan d'une transition A → B ─────────────────────────────────────────────────────────────────
     // Rend le choix (DJCore.choix.choisir) enrichi de sortie_s et entree_s, ou { erreur }.
     // historique : remplace celui du mode auto (run.sh passe la transition précédente du banc d'essai)
+    // minExit_s : nombre, ou fonction relue après les attentes (position de lecture + marge, mode auto).
     async function planTransition(A, B, { force = null, minExit_s = 0, graine = null, contexte, historique } = {}) {
-      // avance fraîche : delay n'est rafraîchi par tick que si le mode auto est allumé (forçage depuis l'écran)
-      await readState();
       const [a, b] = await Promise.all([audio(A).catch(() => null), audio(B).catch(() => null)]);
+      // Paroles (V1, allumé par défaut, ADR 0002) : cache, file espacée et back-off dans dj-voix.js ; null → V2.
+      // Celles de A sont en général déjà en cache (chargées quand A était B). L'attente peut durer 8 s.
       const [la, lb] = await Promise.all([C.voix.chargerParoles(A), C.voix.chargerParoles(B)]);
-      const paire = C.placement.paire(a, b, { minExit_s, avance_s: delay, cible_avance_s: target,
+      // Avance et sortie au plus tôt lues APRÈS les attentes (analyses, paroles) : pendant ce temps A a avancé et
+      // l'avance du moteur a pu fondre. delay n'est rafraîchi par tick que si le mode auto est allumé (forçage).
+      await readState();
+      const minExit = typeof minExit_s === 'function' ? minExit_s() : minExit_s;
+      const paire = C.placement.paire(a, b, { minExit_s: minExit, avance_s: delay, cible_avance_s: target,
         contexte: contexte === undefined ? contexteLecture() : contexte, voixA: la, voixB: lb, uriA: A, uriB: B });
       const alea = graine === null || graine === undefined ? Math.random : C.choix.rng(graine);
       const choix = C.choix.choisir(paire, historique ?? status.historique, { rng: alea, force: force ?? status.force });
@@ -81,6 +86,24 @@
       if (!choix.points) return { erreur: `pas de transition : ${paire.refus ?? 'points introuvables'}` };
       choix.sortie_s = choix.points.sortie.t;
       choix.entree_s = choix.points.entree.t;
+      // Mode auto (minExit_s fonction, A en cours de lecture) : sortie déjà dépassée ou trop proche pour le saut →
+      // R2 (A jusqu'à sa fin) si elle est encore devant, sinon pas de plan. Le banc d'essai (transition.js) rejoue A
+      // après le plan : il n'est pas concerné.
+      const jouee = typeof minExit_s === 'function' && P.data?.item?.uri === A ? P.getProgress() : null;
+      if (jouee !== null && choix.sortie_s * 1000 - jouee < AVANT_SAUT_MS) {
+        const r2 = C.choix.choisir(paire, historique ?? status.historique, { rng: alea, force: 'R2' });
+        if (r2.erreur || !r2.points || r2.points.sortie.t * 1000 - jouee < AVANT_SAUT_MS) {
+          return { erreur: `sortie ${fmt(choix.sortie_s)} déjà dépassée (attente des paroles)` };
+        }
+        r2.replis_plan = [{ de: choix.transition, vers: 'R2', raison: 'sortie dépassée pendant l\'attente des paroles', ou: 'plan' }];
+        r2.choisie = choix.choisie;
+        r2.sortie_s = r2.points.sortie.t;
+        r2.entree_s = r2.points.entree.t;
+        return finirPlan(r2);
+      }
+      return finirPlan(choix);
+    }
+    function finirPlan(choix) {
       // repli décidé au plan (forçage impossible, moteur injoignable) : raison visible à l'écran
       const avis = [];
       if (!maquetteOk) avis.push('moteur injoignable : avance inconnue (0 s)');
@@ -206,7 +229,7 @@
         // Sans moteur, un saut couperait le morceau sans transition : on ne prévoit rien (R3).
         if (!maquetteOk) { status.text = 'Maquette éteinte : Spotify joue normalement, sans transition.'; return; }
         try {
-          const choix = await planTransition(item.uri, Bt.uri, { minExit_s: P.getProgress() / 1000 + MARGIN_S });
+          const choix = await planTransition(item.uri, Bt.uri, { minExit_s: () => P.getProgress() / 1000 + MARGIN_S });
           status.plan = { forUri: item.uri, A: item.name ?? item.metadata?.title ?? '', B: Bt, choix, done: false, failed: !!choix.erreur };
           status.text = choix.erreur ? `Pas de transition pour ce morceau : ${choix.erreur}.`
             : `Prévu : ${nom(choix.transition)} vers « ${titre(Bt)} » à ${fmt(choix.sortie_s)}.`
@@ -281,6 +304,9 @@
 
     const DJ = {
       version: 2, status, planTransition, switchAt, sendOrder, ordre, forcer, LEAD,
+      // paroles : compteurs de la file (requêtes, 429, cache) ; allumer / éteindre V1 (drapeau dj-mixer:paroles)
+      paroles: () => C.voix.etatParoles?.() ?? null,
+      setParoles: (on) => S.LocalStorage.set(C.voix.DRAPEAU, on ? '1' : '0'),
       setAuto: (on) => { S.LocalStorage.set(KEY, on ? '1' : '0'); status.plan = null; },
     };
 

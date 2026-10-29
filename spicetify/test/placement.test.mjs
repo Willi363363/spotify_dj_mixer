@@ -152,3 +152,43 @@ test('paire : refus d\'office (album, analyse absente), profil et voix_source', 
   assert.equal(PL.paire(h1, h2, { voixA: instru, voixB: instru }).profil, 'long');
   assert.equal(PL.paire(a, fabriquer({ sections: [S(16, -8, true)], segments: false }), {}).voix_source, 'aucune');
 });
+
+// Revalidation en direct du 2026-10-29 : en rap A chante jusqu'au bout ; C1 n'est refusée que si une ligne de paroles
+// chevauche la sortie (mot coupé), et la sortie se cale de préférence juste après une fin de ligne.
+test('sorties avec paroles : coupe permise après une fin de ligne, décalée si une ligne chevauche la sortie', () => {
+  const C = require('../dj-choix.js');
+  const { paroles } = require('./fixtures/fabrique.js');
+  const secs = [S(8, -14), S(16, -8, true), S(8, -5, true), S(16, -8, true), S(8, -5, true), S(16, -8, true),
+    S(8, -5, true), S(16, -8, true), S(8, -5, true), S(16, -16, true)];
+  const a = fabriquer({ tempo: 140, sections: secs });
+  const b = fabriquer({ tempo: 140, sections: secs, graine: 5 });
+  const k0 = PL.sorties(a, {})[0].mesure, t = (k) => a.bars[k].start;
+  const dix = 'un deux trois quatre cinq six sept huit neuf dix';
+  const plan = (debuts) => {
+    const lignes = V.parserParoles(paroles(debuts.filter((k) => k < a.bars.length).map((k) => [t(k), dix])));
+    const s = PL.sorties(a, { voixA: (i) => V.voixMesure(a, lignes, i), paroles: lignes });
+    const r = C.choisir(PL.paire(a, b, { voixA: lignes, voixB: null }), [], { rng: C.rng(1) });
+    return { lignes, s, refusC1: r.refus?.C1 ?? null };
+  };
+  // 1. lignes de 2 mesures, la dernière finit pile sur la sortie : dernière mesure vocale, mais aucun mot coupé
+  const p1 = plan([k0 - 8, k0 - 6, k0 - 4, k0 - 2, k0, k0 + 2]);
+  assert.equal(p1.s[0].mesure, k0);
+  assert.equal(p1.s[0].vocale, true, 'ancienne règle : refus');
+  assert.equal(p1.s[0].coupe, false);
+  assert.equal(p1.s[0].finLigne, true);
+  assert.ok(!/paroles|voix/.test(p1.refusC1 ?? ''), `C1 : ${p1.refusC1}`);
+  // 2. une ligne chevauche la sortie ; la suivante finit avant la frontière k0 + 4 : sortie décalée là
+  const p2 = plan([k0 - 7, k0 - 5, k0 - 3, k0 - 1, k0 + 1, k0 + 4]);
+  assert.equal(V.coupeLigne(p2.lignes, t(k0)), true);
+  assert.equal(p2.s[0].mesure, k0 + 4);
+  assert.deepEqual([p2.s[0].coupe, p2.s[0].finLigne], [false, true]);
+  assert.ok(!/paroles|voix/.test(p2.refusC1 ?? ''), `C1 : ${p2.refusC1}`);
+  // 3. toutes les frontières de phrase tombent au milieu d'une ligne : C1 refusée, raison explicite
+  const p3 = plan(Array.from({ length: 14 }, (_, j) => k0 - 7 + 2 * j));
+  assert.equal(p3.s[0].coupe, true);
+  assert.equal(p3.refusC1, 'ligne de paroles de A coupée à la sortie');
+  // 4. sans paroles : règle inchangée (voix sur la dernière mesure)
+  const s4 = PL.sorties(a, { voixA: (i) => V.voixMesure(a, null, i) });
+  assert.equal(s4[0].coupe, s4[0].vocale);
+  assert.equal(s4[0].parParoles, false);
+});

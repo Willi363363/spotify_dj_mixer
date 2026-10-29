@@ -5,7 +5,7 @@ Installé par `installer.sh` : cinq extensions et une app. La règle de choix vi
 | Fichier | Rôle |
 |---|---|
 | `dj-catalogue.js` | Catalogue d'affichage : nom, famille, couleur, étapes de frise de C1-C8, R1, R2, R3, secours ; étiquettes de note ; `masquer` pour l'écoute à l'aveugle. Servi aussi par le moteur à `ecran.html` |
-| `dj-voix.js` | Voix par mesure au plan (ADR 0002) : segments de Spotify (V2) par défaut ; paroles synchronisées (V1) seulement si `dj-mixer:paroles` vaut `1` dans le LocalStorage |
+| `dj-voix.js` | Voix par mesure au plan (ADR 0002) : paroles synchronisées (V1) par défaut, en cache LocalStorage, une requête toutes les 3 s avec back-off sur 429 (éteint si `dj-mixer:paroles` vaut `0`) ; repli sur les segments de Spotify (V2, calibré, cf. `docs/tests/11-voix.md`) |
 | `dj-placement.js` | Placement (§5) : phrases, confiance de grille, dernière section pleine, sortie de A avec garde-fou fin coupée, entrées E0/E1/E2, ΔE, profil court/long, tempo et Camelot |
 | `dj-choix.js` | Choix automatique (§7), repli au plan (§8), construction de l'ordre v2 (ADR 0001) |
 | `dj-auto.js` | Orchestration : quand le mode automatique est allumé, planifie la transition vers le suivant de la file, saute pile sur le temps dans le contexte de lecture, envoie l'ordre au moteur, rattrape un changement manuel (R1). Moteur éteint : aucun saut, Spotify joue seul (R3) |

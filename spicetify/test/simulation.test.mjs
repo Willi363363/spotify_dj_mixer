@@ -15,6 +15,7 @@ import path from 'node:path';
 const require = createRequire(import.meta.url);
 const PL = require('../dj-placement.js');
 const C = require('../dj-choix.js');
+const V = require('../dj-voix.js');
 const CAT = require('../dj-catalogue.js');
 const { bibliotheque } = require('./fixtures/bibliotheque.js');
 
@@ -50,7 +51,9 @@ function simuler(graine, { ordre = 'hasard', taille = 60 } = {}) {
     const sortieVisee = PL.sorties(a, {})[0]?.t ?? a.track.duration;
     avance = Math.min(AVANCE_VISEE_S, avance + Math.max(0, sortieVisee - entreePrec - 15) * (1 - 1 / RALENTI));
     const avancePlan = avance;
-    const p = PL.paire(a, b, { avance_s: avance, cible_avance_s: AVANCE_VISEE_S });
+    // V1 allumé par défaut (ADR 0002) : paroles si le morceau en a, sinon V2
+    const p = PL.paire(a, b, { avance_s: avance, cible_avance_s: AVANCE_VISEE_S,
+      voixA: V.parserParoles(a.paroles), voixB: V.parserParoles(b.paroles) });
     let ch = C.choisir(p, h, { rng: alea });
     ch = C.replierAuPlan(ch, { avance_s: avance });
     const o = C.ordre(ch, p, { t_wall: T0 });

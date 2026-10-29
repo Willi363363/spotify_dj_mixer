@@ -13,7 +13,8 @@ const { creer } = require('../dj-auto.js');
 const { bibliotheque, morceau } = require('./fixtures/bibliotheque.js');
 
 // Faux Spotify : horloge virtuelle, lecture d'une file de morceaux, saut par PlayerAPI.play({ seekTo })
-function monde(pistes, { avance = () => 60, contexte = 'spotify:playlist:37i9dQZF1DX0000000000000', reserve = null } = {}) {
+function monde(pistes, { avance = () => 60, contexte = 'spotify:playlist:37i9dQZF1DX0000000000000', reserve = null,
+  chargerParoles = null } = {}) {
   const parUri = new Map([...pistes, ...(reserve ?? [])].map((p) => [p.uri, p]));
   let horloge = 1_800_000_000_000;
   const lecture = { uri: pistes[0].uri, debut: horloge, pos0: 0, contexte };
@@ -45,9 +46,12 @@ function monde(pistes, { avance = () => 60, contexte = 'spotify:playlist:37i9dQZ
     if (url.endsWith('/order')) { ordres.push({ ...JSON.parse(o.body), _maintenant: horloge }); return { ok: true, json: async () => ({ ok: true }) }; }
     return { ok: false, status: 404, json: async () => ({}) };
   };
-  const inst = creer({ Spicetify: S, fetch, DJCore, maintenant: () => horloge, sleep: async (ms) => { horloge += ms; } });
+  // chargerParoles(avancer) : remplace le chargement des paroles (attente simulée sur l'horloge virtuelle)
+  const core = chargerParoles ? { ...DJCore, voix: { ...DJCore.voix, chargerParoles: () => chargerParoles((ms) => { horloge += ms; }) } }
+    : DJCore;
+  const inst = creer({ Spicetify: S, fetch, DJCore: core, maintenant: () => horloge, sleep: async (ms) => { horloge += ms; } });
   return {
-    inst, ordres, sauts, store, lecture, file,
+    inst, ordres, sauts, store, lecture, file, progression: () => S.Player.getProgress(),
     avancer: (ms) => { horloge += ms; },
     // Joue jusqu'à n ordres (ou fin de la file), tick toutes les 250 ms, saut de 5 s quand rien n'est imminent
     async jouer(n) {
@@ -169,4 +173,42 @@ test('planTransition lit l\'avance du moteur même mode auto éteint, et rend vi
   assert.notEqual(c2.transition, 'C5');
   assert.match(c2.avertissement, /C5 impossible.*avance 3 s/);
   assert.match(m2.inst.status.text, /C5 impossible/);
+});
+
+test('plan : avance et sortie au plus tôt relues après l\'attente des paroles (8 s) ; sortie dépassée → R2 ou refus', async () => {
+  const pistes = [morceau('rap', 81, { tempo: 95, cle: 0, mode: 1, cleConf: 0.9 }),
+    morceau('rap', 82, { tempo: 95.5, cle: 0, mode: 1, cleConf: 0.9 })];
+  const [A, B] = pistes.map((p) => p.uri);
+  // paroles : 4 s d'attente chacune (A et B, 8 s en tout) ; pendant ce temps l'avance du moteur tombe de 60 à 3 s
+  let attendu = false;
+  const lent = async (avancer) => { avancer(4000); attendu = true; return null; };
+  const m = monde(pistes, { avance: () => (attendu ? 3 : 60), chargerParoles: lent });
+  m.store['dj-mixer:auto'] = '0';
+  const c = await m.inst.DJ.planTransition(A, B, { force: 'C5', contexte: null });
+  assert.match(c.avertissement ?? '', /C5 impossible.*avance 3 s/, 'avance lue après l\'attente');
+  // sortie au plus tôt (position + 15 s) relue après l'attente : la sortie préférée, à 20 s de la position de départ,
+  // n'est plus atteignable avec la marge
+  const s1 = DJCore.placement.paire(pistes[0], pistes[1], {}).sortie(0).t;
+  attendu = false;
+  const m2 = monde(pistes, { chargerParoles: lent });
+  m2.lecture.pos0 = (s1 - 20) * 1000;
+  const c2 = await m2.inst.DJ.planTransition(A, B, { force: 'C2', contexte: null,
+    minExit_s: () => m2.progression() / 1000 + 15 });
+  assert.ok(!c2.erreur, c2.erreur);
+  assert.ok(c2.sortie_s * 1000 >= m2.progression() + 15000 - 1, `sortie ${c2.sortie_s} trop proche`);
+  assert.notEqual(c2.sortie_s, s1);
+  // sortie déjà dépassée au moment du plan (mode auto) : R2 si la fin de A est encore devant, sinon refus
+  const m3 = monde(pistes);
+  m3.lecture.pos0 = (s1 + 2) * 1000;
+  const c3 = await m3.inst.DJ.planTransition(A, B, { force: 'C2', contexte: null, minExit_s: () => 0 });
+  assert.equal(c3.transition, 'R2');
+  assert.match(c3.avertissement, /sortie dépassée pendant l'attente des paroles/);
+  assert.ok(c3.sortie_s * 1000 > m3.progression() + 1500);
+  const m4 = monde(pistes);
+  m4.lecture.pos0 = pistes[0].track.duration * 1000 - 200;
+  const c4 = await m4.inst.DJ.planTransition(A, B, { force: 'C2', contexte: null, minExit_s: () => 0 });
+  assert.match(c4.erreur ?? '', /déjà dépassée/);
+  // banc d'essai (minExit_s nombre) : pas concerné, même si A joue au-delà de la sortie
+  const c5 = await m3.inst.DJ.planTransition(A, B, { force: 'C2', contexte: null, minExit_s: 0 });
+  assert.equal(c5.sortie_s, s1);
 });

@@ -4,11 +4,13 @@
 'use strict';
 const { fabriquer, rng } = require('./fabrique.js');
 
+// paroles : part des morceaux qui ont des paroles synchronisées (essai 13 et collecte du 2026-10-29 : rap ~90 %,
+// shatta/bouyon 2 sur 11, house instrumentale sans paroles)
 const GENRES = {
-  rap: { tempo: [88, 100], cleConf: [0.2, 0.7] },
-  shatta: { tempo: [98, 108], cleConf: [0.3, 0.8] },
-  bouyon: { tempo: [148, 160], cleConf: [0.2, 0.6] },
-  house: { tempo: [120, 126], cleConf: [0.5, 0.9] },
+  rap: { tempo: [88, 100], cleConf: [0.2, 0.7], paroles: 0.9 },
+  shatta: { tempo: [98, 108], cleConf: [0.3, 0.8], paroles: 0.2 },
+  bouyon: { tempo: [148, 160], cleConf: [0.2, 0.6], paroles: 0.2 },
+  house: { tempo: [120, 126], cleConf: [0.5, 0.9], paroles: 0 },
 };
 
 const B62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -40,7 +42,7 @@ function morceau(genre, graine, o = {}) {
     cleConf: o.cleConf ?? +(g.cleConf[0] + a() * (g.cleConf[1] - g.cleConf[0])).toFixed(2),
     sections: o.sections ?? s, confiance: o.confiance ?? 0.65, gigue: o.gigue ?? 0.004,
     silenceDebut: o.silenceDebut ?? 0.2, silenceFin: o.silenceFin ?? 1.5, segments: o.segments, graine,
-    uri: o.uri ?? uri(graine),
+    uri: o.uri ?? uri(graine), paroles: o.paroles ?? a() < g.paroles,
   });
 }
 

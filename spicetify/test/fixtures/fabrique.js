@@ -1,6 +1,7 @@
 // Analyses factices au format de Spicetify.getAudioData (track, bars, beats, sections, segments), pour tester la
-// voix (V2), le placement et le choix hors de Spotify. Rien ici n'est calibré sur de vrais morceaux : la forme des
-// segments « vocaux » (syllabes serrées, timbre brillant, chroma pointue) reprend seulement l'hypothèse de V2.
+// voix (V2), le placement et le choix hors de Spotify. Les segments « vocaux » suivent les écarts mesurés sur de vrais
+// morceaux (2026-10-29, docs/tests/11-voix.md) : plus forts (timbre[0], sonie), plus brillants (timbre[1]), timbre[3]
+// plus bas, chroma moins pointue, segments plus serrés. Les vraies caractéristiques sont dans voix-reelle.js.
 //
 // fabriquer({
 //   tempo: 120, cle: 0, mode: 1, cleConf: 0.8,       // tonalité Spotify (key, mode, key_confidence)
@@ -8,6 +9,7 @@
 //   confiance: 0.7, gigue: 0.004,                     // confiance des mesures, écart relatif de leur durée
 //   silenceDebut: 0.3, silenceFin: 1.5,               // secondes
 //   segments: true, graine: 1, uri,
+//   paroles: true,                                    // false : pas de paroles synchronisées (analyse.paroles = null)
 // })
 'use strict';
 
@@ -30,7 +32,9 @@ function segment(start, duration, sonie, vocal, alea) {
   timbre[0] = 45 + sonie + n(2);
   timbre[1] = vocal ? 35 + n(12) : -15 + n(12);
   timbre[2] = vocal ? -10 + n(10) : 10 + n(10);
-  const pitches = new Array(12).fill(0).map(() => (vocal ? 0.05 + alea() * 0.25 : 0.45 + alea() * 0.55));
+  timbre[3] = vocal ? 0 + n(12) : 25 + n(12);
+  timbre[5] = vocal ? -15 + n(10) : -30 + n(10);
+  const pitches = new Array(12).fill(0).map(() => (vocal ? 0.25 + alea() * 0.5 : 0.05 + alea() * 0.3));
   pitches[Math.floor(alea() * 12)] = 1;
   const lmax = sonie + (vocal ? 2 : 0) + n(1.5);
   return { start: r3(start), duration: r3(duration), confidence: 0.6, loudness_start: r3(lmax - 12),
@@ -46,7 +50,7 @@ function fabriquer(o = {}) {
   const silenceDebut = o.silenceDebut ?? 0.3, silenceFin = o.silenceFin ?? 1.5;
   const sections = o.sections ?? [{ mesures: 8, sonie: -12, voix: false }, { mesures: 32, sonie: -8, voix: true },
     { mesures: 8, sonie: -12, voix: false }];
-  const bars = [], beats = [], segs = [], secs = [];
+  const bars = [], beats = [], segs = [], secs = [], lignes = [];
   if (silenceDebut > 0) segs.push(segment(0, silenceDebut, -60, false, alea));
   let t = silenceDebut;
   for (const s of sections) {
@@ -57,6 +61,9 @@ function fabriquer(o = {}) {
       bars.push({ start: r3(t), duration: r3(d), confidence: r3(conf) });
       for (let k = 0; k < 4; k++) beats.push({ start: r3(t + (k * d) / 4), duration: r3(d / 4), confidence: r3(conf) });
       const vocal = Array.isArray(s.voix) ? !!s.voix[m] : !!s.voix;
+      // paroles factices : une ligne par mesure chantée ; une ligne vide ferme la phrase à la 1re mesure sans voix
+      if (vocal) lignes.push([t + 0.05, 'la la la']);
+      else if (lignes.length && lignes.at(-1)[1]) lignes.push([t, '']);
       const nSeg = vocal ? 8 : 4;
       for (let k = 0; k < nSeg; k++) segs.push(segment(t + (k * d) / nSeg, d / nSeg, s.sonie, vocal, alea));
       t += d;
@@ -77,6 +84,8 @@ function fabriquer(o = {}) {
       key_confidence: o.cleConf ?? 0.8, loudness: r3(sonieMoy), time_signature: 4, end_of_fade_in: silenceDebut,
       start_of_fade_out: r3(t) },
     bars, beats, sections: secs, segments: o.segments === false ? [] : segs, tatums: [],
+    // réponse color-lyrics factice (V1), ou null si le morceau n'a pas de paroles synchronisées (o.paroles === false)
+    paroles: o.paroles === false ? null : paroles(lignes),
   };
 }
 

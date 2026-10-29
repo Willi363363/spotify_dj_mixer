@@ -1,6 +1,8 @@
 # ADR 0002 · Détection de voix v1, sans spike en direct
 
-Statut : accepté, 2026-10-28. Tranche le §6 et la question Q3 de [`../specs/transitions-v2.md`](../specs/transitions-v2.md)
+Statut : accepté, 2026-10-28 ; **amendé le 2026-10-29** après la tâche 2-direct (calibrage sur de vrais morceaux,
+[`../tests/11-voix.md`](../tests/11-voix.md)) : V1 allumé par défaut, V2 et V3 recalibrés, cf. « Amendement » en fin de
+document. Tranche le §6 et la question Q3 de [`../specs/transitions-v2.md`](../specs/transitions-v2.md)
 (tâche 4), sans attendre les spikes 2 et 3.
 
 ## Contexte
@@ -66,3 +68,31 @@ Option c.
   spec n'en prévoit. La simulation à blanc (critère 9.1-10) le mesure ; les seuils sont des constantes nommées
   (`SEUIL_VOCAL`, `SEUIL_SANS_VOIX`, `SEUIL_REPLI_RENDU`) pour être réglés après la tâche 2-direct.
 - L'endpoint de paroles n'est pas une API publique : il peut changer. Il est derrière un drapeau et n'est jamais nécessaire.
+
+## Amendement du 2026-10-29 (tâche 2-direct)
+
+Mesures : [`../tests/11-voix.md`](../tests/11-voix.md) (77 morceaux, 58 à paroles synchronisées, audio réel de 33,
+validation croisée groupée par morceau). Ce qui change par rapport à la décision ci-dessus :
+
+1. **V1 par défaut** : 75 % des morceaux ont des paroles synchronisées (≥ 60 %). Le drapeau `dj-mixer:paroles` n'éteint
+   V1 que s'il vaut `0`. Score en **trois zones** : 0 si aucune ligne non vide ne recouvre la mesure (≥ 100 ms) ; sinon
+   la part couverte, au moins 0,3 (une mesure recouverte n'est jamais « sans voix »). Requêtes : **cache LocalStorage**
+   par morceau (absents réessayés après 14 jours), **file** d'une requête toutes les 3 s, **pause sur 429** (30 s,
+   doublée jusqu'à 10 min) pendant laquelle tout part sur V2 sans requête ; attente maximale **8 s** par plan (au lieu
+   de 3 s : la file espace A et B), la requête continuant pour remplir le cache. Tout échec → V2, sans erreur visible.
+2. **V2** : régression logistique sur 17 caractéristiques des segments (z-scores robustes par morceau et leur moyenne
+   sur ±2 mesures), recalibrée en probabilité. « Sans voix » (< 0,3) juste 72 % du temps au lieu de 33 % (rappel 14 %
+   au lieu de 41 %), AUC 0,70 → 0,80. Seuils communs inchangés (`SEUIL_VOCAL` 0,5, `SEUIL_SANS_VOIX` 0,3).
+3. **V3** : huit indices sur la même STFT (l'énergie harmonique non stationnaire va contre la voix, au contraire de
+   l'hypothèse de départ), régression logistique recalibrée. **`SEUIL_REPLI_RENDU` = 0,907**, quantile 90 % des scores
+   des mesures sans paroles : 8 à 10 % de faux positifs au lieu de 60 %, précision 0,95, rappel 0,42. Règles de repli
+   au rendu inchangées (C4, C6, C5/C7/C8). Cible du §4 sur synthèse abandonnée : la voix factice n'est pas
+   représentative ; `test_voix.py` vérifie V3 sur des indices dérivés de vrais morceaux tenus à l'écart.
+4. **Effet** (simulation sur les vrais morceaux) : C6 n'est plus rabattue au rendu (0 → 2 % des transitions jouées),
+   C4 0,5 → 2,2 %, C4 + C6 + C7 + C8 jouées 1 → 5 %. Le frein restant des superpositions n'est plus la voix mais les
+   sorties à 8/16 mesures, la tonalité et la netteté des grilles.
+5. **Coupe en fin de ligne** (revalidation en direct, même jour) : avec paroles, C1 et C3 ne sont refusées que si une
+   ligne de paroles chevauche la sortie (fin d'une ligne = fin chantée estimée, ≤ 0,45 s par mot) ; la sortie se cale de
+   préférence juste après une fin de ligne. C1 éligible quand A a des paroles : 33 → 48 % des paires ; jouée 17 → 22 %.
+   Sans paroles, règle inchangée (dernière mesure vocale). Cache : jamais d'erreur transitoire (429, 401, 403, 5xx sous
+   toutes leurs formes → pause), éviction LRU, paroles redemandées après 30 jours. Détails : `11-voix.md`.

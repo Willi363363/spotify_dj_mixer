@@ -117,19 +117,27 @@
   }
 
   // ── Sorties de A (§5.4, §5.5) ─────────────────────────────────────────────────────────────────────
-  // voixA : fonction (index de mesure) → score de voix, facultative. Rend les sorties, la préférée d'abord :
-  // [{ t, mesure, jamais_entendu_s, voixFin, vocale, repli }] ; [] si aucune (→ R2).
-  function sorties(analyse, { minExit_s = 0, T = 0, voixA = null } = {}) {
+  // voixA : fonction (index de mesure) → score de voix, facultative. paroles : lignes de paroles de A (V1), facultatives.
+  // Rend les sorties, la préférée d'abord : [{ t, mesure, jamais_entendu_s, voixFin, vocale, coupe, finLigne,
+  // parParoles, repli }] ; [] si aucune (→ R2). coupe : avec paroles, une ligne est chantée à t (un mot serait coupé) ;
+  // sans paroles, = vocale (voix sur la dernière mesure). C'est coupe, et non vocale, qui bloque C1 et C3.
+  function sorties(analyse, { minExit_s = 0, T = 0, voixA = null, paroles = null } = {}) {
     const m = mesures(analyse);
     if (!m.length) return [];
     const dur = analyse.track?.duration ?? (m[m.length - 1].start + m[m.length - 1].duration);
     const fin = finEffective(analyse);
     const { dernierePleine, outro_s } = sectionsA(analyse);
     const sv = V().SEUIL_VOCAL;
+    const vx = V();
+    const avecParoles = Array.isArray(paroles) && paroles.length > 0;
     const cand = (x) => {
       const jamais = Math.max(0, fin - x.start);
       const voixFin = voixA && x.i > 0 ? voixA(x.i - 1) : 0;
-      return { t: x.start, mesure: x.i, jamais_entendu_s: +jamais.toFixed(2), voixFin, vocale: voixFin >= sv, repli: false };
+      const vocale = voixFin >= sv;
+      const coupe = avecParoles ? vx.coupeLigne(paroles, x.start) : vocale;
+      const finLigne = avecParoles ? vx.finDeLigne(paroles, x.start, analyse.bars[Math.max(0, x.i - 1)].duration) : false;
+      return { t: x.start, mesure: x.i, jamais_entendu_s: +jamais.toFixed(2), voixFin, vocale, coupe, finLigne,
+        parParoles: avecParoles, repli: false };
     };
     const base = m.filter((x) => x.confidence > CONF_MESURE && x.start >= minExit_s && x.start <= dur - FIN_MIN_S
       && x.i - T >= 0);
@@ -153,9 +161,14 @@
       const der = (p8.length ? p8 : p).at(-1);
       return der ? [{ ...cand(der), repli: true, garde: garde(der) }] : [];
     }
-    // Voix de A sur la dernière mesure : décaler d'une demi-phrase (sinon C2 s'en charge)
-    if (liste[0].vocale) {
-      const alt = v4.map(cand).find((c) => c.t > liste[0].t && c.mesure - liste[0].mesure <= 4 && !c.vocale);
+    // Sortie qui couperait A (avec paroles : une ligne chantée à t ; sans : voix sur la dernière mesure) : décaler
+    // vers la frontière de phrase (4 ou 8 mesures) suivante qui ne coupe pas, jusqu'à une phrase plus loin, de
+    // préférence juste après une fin de ligne (dans la dernière mesure) ; à défaut, C2 s'en charge.
+    const pas = avecParoles ? 8 : 4;
+    const proches = () => v4.map(cand).filter((c) => c.t > liste[0].t && c.mesure - liste[0].mesure <= pas && !c.coupe);
+    if (liste[0].coupe) {
+      const alts = proches();
+      const alt = alts.find((c) => c.finLigne) ?? alts[0];
       if (alt) liste = [alt, ...liste.filter((c) => c.mesure !== alt.mesure)];
     }
     return liste;
@@ -267,7 +280,7 @@
     const memo = new Map();
     P.sortie = (T) => {
       const c = `s${T}`;
-      if (!memo.has(c)) memo.set(c, sorties(a, { minExit_s, T, voixA: voixMesA })[0] ?? null);
+      if (!memo.has(c)) memo.set(c, sorties(a, { minExit_s, T, voixA: voixMesA, paroles: voixA })[0] ?? null);
       return memo.get(c);
     };
     P.entrees = (T) => {
